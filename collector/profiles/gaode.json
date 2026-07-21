@@ -1,0 +1,77 @@
+{
+  "platform": "高德地图",
+  "package": "com.autonavi.minimap",
+  "activity_prefix": "com.autonavi.minimap",
+  "screen": {
+    "default_width": null,
+    "default_height": null
+  },
+  "timing": {
+    "app_launch_wait": 3.0,
+    "after_input_wait": 1.0,
+    "after_tap_wait": 2.0,
+    "after_confirm_wait": 3.0,
+    "pricing_page_wait": 2.0
+  },
+  "steps": {
+    "find_search_box": {
+      "element_desc": "首页顶部的搜索框，包含'搜索地点'或'搜索'文字提示，是一个横向长条形可点击区域，通常位于状态栏下方",
+      "element_short": "搜索框",
+      "retry_alt_desc": "页面顶部居中位置包含搜索图标和文字'搜索地点'的横条"
+    },
+    "search_input_box": {
+      "element_desc": "搜索页面顶部的文字输入框，用于输入目的地，通常有光标闪烁或默认提示文字'搜索地点'",
+      "element_short": "搜索输入框",
+      "retry_alt_desc": "搜索页面顶部的文字输入区域，点击后可输入文字"
+    },
+    "search_button": {
+      "element_desc": "搜索页面上的'搜索'按钮，通常在输入框右侧或键盘右下角，是一个蓝色或带文字的按钮",
+      "element_short": "搜索按钮",
+      "retry_alt_desc": "输入框右侧的蓝色搜索按钮或确认图标"
+    },
+    "select_first_candidate": {
+      "element_desc": "地点搜索结果列表中第一个候选地点，通常紧挨搜索框下方，包含地点名称和地址信息",
+      "element_short": "第一个候选地点",
+      "retry_alt_desc": "搜索结果中排在第一行的地点条目"
+    },
+    "find_ride_button": {
+      "element_desc": "页面底部工具栏中的'打车'文字标签或打车图标，通常与'驾车''公交''骑行'等并列在底部tab栏",
+      "element_short": "打车tab",
+      "retry_alt_desc": "底部工具栏中的打车选项，旁边有驾车/公交/骑行等选项"
+    },
+    "select_supplier": {
+      "element_desc": "打车页面中'{supplier}'供应商行，包含车型名称、图标、预估价格，整行可点击选中，选中后左侧有蓝色圆点",
+      "element_short": "供应商行",
+      "retry_alt_desc": "打车页面中显示'{supplier}'文字和价格信息的横排选项"
+    },
+    "price_info_icon": {
+      "element_desc": "打车页面供应商行右侧价格数字旁边的'?'小问号图标，灰色圆形按钮，点击进入计价弹窗",
+      "element_short": "计价问号",
+      "retry_alt_desc": "供应商行价格右侧的问号图标按钮"
+    },
+    "rest_day_tab": {
+      "element_desc": "计价弹窗价格组成区域顶部的'休息日'文字标签页，与'工作日'标签并列，灰色未选中状态",
+      "element_short": "休息日标签",
+      "retry_alt_desc": "计价弹窗顶部与'工作日'并列的'休息日'选项标签"
+    },
+    "workday_tab": {
+      "element_desc": "计价弹窗价格组成区域顶部的'工作日'文字标签页，与'休息日'标签并列，蓝色选中高亮状态",
+      "element_short": "工作日标签",
+      "retry_alt_desc": "计价弹窗顶部与'休息日'并列的'工作日'选项标签"
+    },
+    "back_arrow": {
+      "element_desc": "页面顶部标题栏左上角的返回箭头'<'图标，位于标题文字左侧",
+      "element_short": "返回箭头",
+      "retry_alt_desc": "顶部标题栏左侧的返回箭头或关闭按钮"
+    }
+  },
+  "collection": {
+    "scroll_duration_ms": 500,
+    "after_scroll_wait": 1.0,
+    "page1_scroll_half_screens": 3,
+    "page2_scroll_half_screens": 6,
+    "swipe_duration_ms": 400,
+    "max_suppliers": 2,
+    "max_scroll_rounds": 15
+  }
+}

@@ -1,0 +1,73 @@
+# v1: 搜索框 → 输入地点 → 选候选 → 打车 tab → 计价采集
+# 公共前缀：从首页搜索框进入
+name: "v1-高德地图-搜索进入"
+version: "1"
+description: "从首页搜索框搜索目的地，选择候选后进入打车页"
+
+package: "com.autonavi.minimap"
+
+timing:
+  app_launch_wait: 3.0
+  after_tap_wait: 2.0
+  after_input_wait: 1.0
+  after_confirm_wait: 3.0
+
+steps:
+  - id: "open_app"
+    type: "open_app"
+    package: "com.autonavi.minimap"
+    description: "打开高德地图"
+
+  - id: "tap_search_box"
+    type: "ground_click"
+    description: "点击首页搜索框"
+    ground:
+      element_desc: "首页顶部的搜索框，包含'搜索地点'或'搜索'文字提示，是一个横向长条形可点击区域，通常位于状态栏下方"
+      retry_alt_descs:
+        - "页面顶部居中位置包含搜索图标和文字'搜索地点'的横条"
+
+  - id: "input_destination"
+    type: "input_text"
+    description: "输入目的地，点击搜索按钮"
+    value: "{{.Address}}"
+    confirm: "key_search"
+    confirm_ground:
+      element_desc: "输入框右侧的蓝色「搜索」按钮或放大镜图标"
+      retry_alt_descs:
+        - "输入框旁边的搜索按钮"
+    ground:
+      element_desc: "搜索页面顶部的文字输入框，用于输入目的地，通常有光标闪烁或默认提示文字'搜索地点'"
+      retry_alt_descs:
+        - "搜索页面顶部的文字输入区域，点击后可输入文字"
+
+  - id: "pick_candidate"
+    type: "ground_click"
+    description: "选择第一个候选地点"
+    optional: true
+    ground:
+      element_desc: "地点搜索结果列表中第一个候选地点，通常紧挨搜索框下方，包含地点名称和地址信息"
+      retry_alt_descs:
+        - "搜索结果中排在第一行的地点条目"
+
+  - id: "tap_taxi_tab"
+    type: "ground_click"
+    description: "点击打车tab"
+    mandatory: true
+    verify_page:
+      expected: "路径规划页"
+      on_page_mismatch:
+        - page: "POI详情页"
+          recovery:
+            - strategy: "vlm_find_and_click"
+              prompt: "POI 详情页中寻找「路线」按钮（通常位于页面下方，蓝色或白色文字，可能带有导航图标）"
+            - strategy: "vlm_find_and_click"
+              prompt: "POI 详情页中的「去这里」或「到这去」按钮，通常位于页面下方或右下角，蓝色背景"
+            - strategy: "vlm_find_and_click"
+              prompt: "页面中的「打车」文字或叫车按钮（可能在底部或右下角），点击后进入打车页"
+            - strategy: "back_retry"
+    ground:
+      element_desc: "页面底部工具栏中的'打车'文字标签或打车图标，通常与'驾车''公交''骑行'等并列在底部tab栏"
+      retry_alt_descs:
+        - "底部工具栏中的打车选项，旁边有驾车/公交/骑行等选项"
+    fallback:
+      prompt: "页面底部区域（大约屏幕下方1/6）中查找'打车'两个字，可能在工具栏或tab栏中"

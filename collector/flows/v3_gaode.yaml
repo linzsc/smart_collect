@@ -1,0 +1,156 @@
+# v3: 冒泡场景 — 特惠快车三角形展开 → 盒子页全选 → 确认 → 经济型 → 出租车退出
+# 仅在打车页操作，不进入计价弹窗
+name: "v3-高德地图-冒泡场景"
+version: "1"
+description: "点击特惠快车三角形展开盒子页，全选后确认，勾选经济型，下滑到出租车退出"
+
+package: "com.autonavi.minimap"
+
+timing:
+  app_launch_wait: 3.0
+  after_tap_wait: 2.0
+  after_input_wait: 1.0
+  after_confirm_wait: 3.0
+
+steps:
+  - id: "open_app"
+    type: "open_app"
+    package: "com.autonavi.minimap"
+    description: "打开高德地图"
+
+  # ── 1. 点击底部「打车」tab ──
+  - id: "tap_taxi_tab"
+    type: "ground_click"
+    description: "点击底部打车tab进入打车页"
+    mandatory: true
+    ground:
+      element_desc: "页面底部工具栏中的'打车'文字标签或打车图标，通常与'驾车''公交''骑行'等并列在底部tab栏"
+      retry_alt_descs:
+        - "底部工具栏中的打车选项，旁边有驾车/公交/骑行等选项"
+    fallback:
+      prompt: "页面底部区域（大约屏幕下方1/6）中查找'打车'两个字"
+
+  # ── 2. 填写上车点 → 搜索 → 选第一个候选 ──
+  - id: "set_pickup"
+    type: "input_text"
+    description: "输入上车地点，点击搜索按钮"
+    value: "{{.Pickup}}"
+    confirm: "key_search"
+    confirm_ground:
+      element_desc: "搜索输入框右侧的蓝色「搜索」按钮或放大镜图标"
+      retry_alt_descs:
+        - "输入框旁边的搜索按钮"
+    ground:
+      element_desc: "打车页面中上部的上车点输入框/显示区域，通常显示当前位置或「你在哪」文字"
+      retry_alt_descs:
+        - "打车页面顶部附近的上车地点编辑入口"
+
+  - id: "pick_first_pickup"
+    type: "ground_click"
+    description: "选择上车点候选列表第一个"
+    optional: true
+    ground:
+      element_desc: "上车点搜索结果列表中第一个候选地点，通常紧挨输入框下方，包含地点名称和地址"
+      retry_alt_descs:
+        - "搜索结果中排在第一行的上车点条目"
+
+  # ── 3. 填写目的地 → 搜索 → 选第一个候选 ──
+  - id: "set_dropoff"
+    type: "input_text"
+    description: "点击目的地输入框，输入目的地，点击搜索按钮"
+    value: "{{.Address}}"
+    confirm: "key_search"
+    confirm_ground:
+      element_desc: "搜索输入框右侧的蓝色「搜索」按钮或放大镜图标"
+      retry_alt_descs:
+        - "输入框旁边的搜索按钮"
+    ground:
+      element_desc: "打车页面中上车点下方的「你要去哪儿」或「输入目的地」输入框，灰色提示文字"
+      retry_alt_descs:
+        - "上车点下方带有「去哪」或「目的地」文字的搜索/输入区域"
+
+  - id: "pick_first_dropoff"
+    type: "ground_click"
+    description: "选择目的地候选列表第一个"
+    optional: true
+    ground:
+      element_desc: "目的地搜索结果列表中第一个候选地点，包含地点名称和地址信息"
+      retry_alt_descs:
+        - "搜索结果中排在第一行的目的地条目"
+
+  # ════════════════════════════════════════════════════════════════════
+  # 冒泡场景开始
+  # ════════════════════════════════════════════════════════════════════
+
+  # ── S0: 打车页上滑 (仿照 v2→RidePricingFSM._s0_scroll_up) ──
+  - id: "s0_scroll_up"
+    type: "scroll"
+    description: "向上滑动拉出下方内容"
+    direction: "up"
+    repeat: 2
+
+  # ── S1: 点击「特惠快车」下方的三角形 ──
+  - id: "tap_triangle"
+    type: "ground_click"
+    description: "点击特惠快车下方的竖三角形展开箭头"
+    mandatory: true
+    ref_image: "triangle.png"
+    ground:
+      element_desc: "打车页面中找到「特惠快车」这一行，在该行下方有一个竖着的三角形展开箭头（附件是参考图），点击它"
+      retry_alt_descs:
+        - "特惠快车旁边的下拉展开箭头图标"
+
+  # ── S2: 等待盒子页出现 ──
+  - id: "wait_box"
+    type: "wait"
+    description: "等待白底盒子页弹出"
+    seconds: 1.5
+
+  # ── S3: 盒子页全选 (double check) ──
+  - id: "box_select_all"
+    type: "ground_doublecheck"
+    description: "在盒子页下半部分白底区域勾选全选"
+    ref_images:
+      - "yes.png"
+      - "false.png"
+    ground:
+      element_desc: "当前屏幕下半部分是弹出的白底盒子页，显示多款特快车车型。在盒子页白底区域内找到「全选」勾选控件。勾选控件是'全选'文字右边的圆形勾选框。参考附件图1 yes.png（已勾选蓝底白勾✓）和图2 false.png（未勾选灰色空心圆○）判断状态。\n\n**必须**在Action首行以 EXACT 格式输出: SELECTED=true 或 SELECTED=false\n如果未选中(SELECTED=false)，返回 bbox 和中心坐标。如果已选中(SELECTED=true)，bbox 填 [0,0,0,0]。"
+
+  # ── S4: 盒子页内向下滑动到底 ──
+  - id: "box_scroll_to_bottom"
+    type: "scroll"
+    description: "在盒子页内下滑到底"
+    direction: "half_down"
+    repeat: 6
+
+  # ── S5: 点击「确认」 ──
+  - id: "tap_confirm"
+    type: "ground_click"
+    description: "点击盒子页底部的确认按钮"
+    mandatory: true
+    ground:
+      element_desc: "白底盒子页底部的「确认」按钮，蓝色或带文字，点击关闭盒子页"
+      retry_alt_descs:
+        - "盒子页下方的确认/确定按钮"
+
+  # ── S6: 打车页全选经济型 (double check) ──
+  - id: "select_all_economy"
+    type: "ground_doublecheck"
+    description: "在打车页勾选全选经济型"
+    ref_images:
+      - "yes.png"
+      - "false.png"
+    ground:
+      element_desc: "回到打车页面，找「经济型」分组标题右边'全选经济'文字右侧的勾选圆圈控件。参考图1 yes.png 已勾选，图2 false.png 未勾选。\n\n**必须**在Action首行以 EXACT 格式输出: SELECTED=true 或 SELECTED=false\n如果未选中(SELECTED=false)，返回 bbox 和中心坐标。如果已选中(SELECTED=true)，bbox 填 [0,0,0,0]。"
+
+  # ── S7: 下滑直到「出租车」出现 ──
+  - id: "scroll_to_taxi"
+    type: "scroll_until_visible"
+    description: "向下滑动直到出现出租车文字"
+    target_text: "出租车"
+    max_swipes: 20
+
+  # ── S8: 退出 ──
+  - id: "finish"
+    type: "screenshot"
+    description: "最终截图确认"

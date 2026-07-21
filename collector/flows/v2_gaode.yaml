@@ -1,0 +1,88 @@
+# v2: 打开高德 → 底部打车tab → 输入上车点 → 输入终点 → 打车页
+# 比 v1 少1-2步，更短更稳定（不依赖搜索结果页的路由分叉）
+name: "v2-高德地图-打车tab进入"
+version: "1"
+description: "打开高德后直接点击底部打车tab，输入起终点进入打车页"
+
+package: "com.autonavi.minimap"
+
+timing:
+  app_launch_wait: 3.0
+  after_tap_wait: 2.0
+  after_input_wait: 1.0
+  after_confirm_wait: 3.0
+
+steps:
+  - id: "open_app"
+    type: "open_app"
+    package: "com.autonavi.minimap"
+    description: "打开高德地图"
+
+  # ── 1. 点击底部「打车」tab ──
+  - id: "tap_taxi_tab"
+    type: "ground_click"
+    description: "点击底部打车tab进入打车页"
+    mandatory: true
+    ground:
+      element_desc: "页面底部工具栏中的'打车'文字标签或打车图标，通常与'驾车''公交''骑行'等并列在底部tab栏"
+      retry_alt_descs:
+        - "底部工具栏中的打车选项，旁边有驾车/公交/骑行等选项"
+    fallback:
+      prompt: "页面底部区域（大约屏幕下方1/6）中查找'打车'两个字"
+
+  # ── 2. 填写上车点 → 搜索 → 选第一个候选 ──
+  - id: "set_pickup"
+    type: "input_text"
+    description: "输入上车地点，点击搜索按钮"
+    value: "{{.Pickup}}"
+    confirm: "key_search"
+    confirm_ground:
+      element_desc: "搜索输入框右侧的蓝色「搜索」按钮或放大镜图标"
+      retry_alt_descs:
+        - "输入框旁边的搜索按钮"
+
+    ground:
+      element_desc: "打车页面中上部的上车点输入框/显示区域，通常显示当前位置或「你在哪」文字"
+      retry_alt_descs:
+        - "打车页面顶部附近的上车地点编辑入口"
+
+  - id: "pick_first_pickup"
+    type: "ground_click"
+    description: "选择上车点候选列表第一个"
+    optional: true
+    ground:
+      element_desc: "上车点搜索结果列表中第一个候选地点，通常紧挨输入框下方，包含地点名称和地址"
+      retry_alt_descs:
+        - "搜索结果中排在第一行的上车点条目"
+
+  # ── 3. 填写目的地 → 搜索 → 选第一个候选 ──
+  - id: "set_dropoff"
+    type: "input_text"
+    description: "点击目的地输入框，输入目的地，点击搜索按钮"
+    value: "{{.Address}}"
+    confirm: "key_search"
+    confirm_ground:
+      element_desc: "搜索输入框右侧的蓝色「搜索」按钮或放大镜图标"
+      retry_alt_descs:
+        - "输入框旁边的搜索按钮"
+
+    ground:
+      element_desc: "打车页面中上车点下方的「你要去哪儿」或「输入目的地」输入框，灰色提示文字"
+      retry_alt_descs:
+        - "上车点下方带有「去哪」或「目的地」文字的搜索/输入区域"
+
+  - id: "pick_first_dropoff"
+    type: "ground_click"
+    description: "选择目的地候选列表第一个"
+    optional: true
+    ground:
+      element_desc: "目的地搜索结果列表中第一个候选地点，包含地点名称和地址信息"
+      retry_alt_descs:
+        - "搜索结果中排在第一行的目的地条目"
+
+  # ── 4. 打车页上滑 ──
+  - id: "s0_scroll_up"
+    type: "scroll"
+    description: "向上滑动拉出下方内容"
+    direction: "up"
+    repeat: 2
