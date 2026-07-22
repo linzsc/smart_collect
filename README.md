@@ -78,6 +78,12 @@ output/                # 运行时输出（截图 + 标注）
     --vlm-api-key "sk-..." --vlm-base-url "https://..."
 ```
 
+
+## todo 
+- 特殊场站
+- 出现广告弹窗（交给LLM进行判断）
+- 目前点击勾选框，还是有点问题，容易识别错误（如何改进）
+
 ## 详细文档
 
 [架构文档](~/Documents/My-Vault/20-Projects/智能采集/架构文档.md)

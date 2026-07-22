@@ -1,0 +1,46 @@
+  cd ~/projects/mobile-agent-demo/MobileAgent-main/Mobile-Agent-v3.5/mobile_use && \
+  export API_KEY="。。。" && \
+  /Users/didi/projects/mobile-agent-demo/.venv/bin/python run_gui_owl_1_5_for_mobile.py \
+    --adb_path "adb" \
+    --api_key "$API_KEY" \
+    --base_url "https://ws-2ucs8b0qvwhg7isy.cn-beijing.maas.aliyuncs.com/compatible-mode/v1" \
+    --model "qwen3-vl-plus" \
+    --ref_image "image.png" \
+    --instruction "在高德地图完成以下任务，严格按顺序逐步执行，每步动作后截图确认当前页面状态。【硬性约束：全程绝对禁止点击'立即打车''确认叫车''呼叫'等任何发起叫车的按钮，本任务只勾选车型不叫车；也不要点击'拼车'选项，拼车不在本任务范围内】【状态识别：蓝色对勾√表示该项已勾选，遇到已勾选项直接跳过，绝对不要重复点击以免取消勾选】【参考图标：附图是一张参考图标小图(一个圆形灰色底配白色向下三角形的展开按钮)。当任务进行到'点击特惠快车展开'这一步时，请在当前截图里找到与参考图标视觉一致的按钮(特惠快车文字正下方那个向下小三角形)，点击它的中心】
+阶段一·进入打车页：1.按Home回桌面 2.打开高德地图 3.点搜索框输入西北旺万象汇（注意是输入文字） 4.点在这下车进入打车聚合页。
+阶段二·确认勾选并展开特惠快车：5.找到特惠快车选项，先确认其已处于勾选状态（显示蓝色对勾√）；若未勾选则先点击特惠快车勾选，已勾选则跳过 6.对照参考图标定位特惠快车文字正下方的向下小三角形按钮并点击它(注意:点的是三角形图标不是卡片本身也不是文字)，点击后会展开一个二级车型盒子 7.在展开的二级菜单盒子内，首先找到并确认「全选」处于勾选状态（显示蓝色对勾√），若未勾选则点击全选将其勾选，确保所有细分车型都被勾选上 8.勾选全选后，一定要向下滑动至最底部浏览确认看到所有的供应商，直到划不动。9点击确定，退出二级页面
+阶段三·勾选全选经济并不断下滑：9.勾选经济型同一行的 ，靠近右边的全选经济，确保全部经济勾选了，不要一个一个勾选，而是全选经济旁方框被勾选 10.持续不断向下滑动，每次滑动不要太多，每次滑动后截图确认，直到页面上出现经济型以外的其他车型（如舒适型、商务型、专车，出租车等），确认看到后即可停止滑动。
+阶段四·结束：使用terminate结束任务。再次提醒绝对不要点击叫车按钮、不要点拼车。" \
+    --add_info "" \
+    --max_steps 25
+
+
+    /Users/didi/projects/mobile-agent-demo/.venv/bin/python test_image_resample.py --compare-pixels "500000,1200000,2000000,5000000"
+请阅读：https://bailian.aliyun.com/cli/install.md 并按照说明为我安装阿里云百炼 CLI
+
+
+sk-ws-H.EHHRHEL.LmPh.MEUCIF84Exjg44TEFo1hbphd4IdAylQq-zxNJn2MsbfAbH1lAiEAv-0XhCuvkBPbVVK2B7eeV3vEMipcYoan3mMf0i0lJzI
+
+
+文档： 腾讯，阿里，所有的框架，效果，对比（调研）workflow，拒绝运营，技术探索
+
+试试模拟器是否可行，
+
+成本，token
+
+完整配置化，通用泛化的基于模拟器的，可以编排的采集数据的agent ，支持测试，
+
+自动化测试，
+
+调研！！！！！
+
+大模型手机
+
+自动化测试 共同方向
+
+README亮点，参考
+
+继续完善
+
+LLM兜底
+

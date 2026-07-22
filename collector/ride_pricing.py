@@ -179,12 +179,20 @@ class RidePricingFSM:
         ref_no = str(root_dir / "assets" / "false.png")
 
         desc = (
-            "高德打车页面。对比附件2张参考图判断「经济型」分组右边勾选控件的状态：\n"
-            "图1 yes.png = 已勾选(蓝底白勾✓)，图2 false.png = 未勾选(灰色空心圆○)。\n"
-            "勾选控件在「全选经济」**文字右侧**，不要点文字。\n\n"
-            "**必须**在Action首行以 EXACT 格式输出: SELECTED=true 或 SELECTED=false\n"
-            "SELECTED=false → 返回右侧勾选圆圈的 bbox 和中心坐标\n"
-            "SELECTED=true → bbox [0,0,0,0]"
+            "高德打车页面。请严格按照以下步骤操作：\n\n"
+            "1. **先定位「全选经济」这四个字**，确认它在截图中的位置。\n"
+            "   它通常在页面偏中部靠右，是一个分组筛选区的标题。\n\n"
+            "2. **只看「全选经济」文字右侧紧挨着的勾选方框**，"
+            "不要看其他任何供应商行右边的元素。\n\n"
+            "3. 对比附件2张参考图判断该圆圈的勾选状态：\n"
+            "   图1 yes.png = 已勾选(蓝底白勾✓)\n"
+            "   图2 false.png = 未勾选(灰色空心圆○)\n\n"
+            "**严格要求**：\n"
+            "- 勾选圆圈必须在「全选经济」这四个字**同一行的右侧**，距离不超过两个字宽\n"
+            "- 不要把供应商行（如快车、特惠快车）右边的图标当成目标\n"
+            "- **必须**在Action首行以 EXACT 格式输出: SELECTED=true 或 SELECTED=false\n"
+            "- SELECTED=false → 返回该勾选圆圈的 bbox 和中心坐标\n"
+            "- SELECTED=true → bbox [0,0,0,0]"
         )
         self.stats["vlm_calls"] += 1
         result = self.grounder.ground(shot, desc, screen_w=sw, screen_h=sh,

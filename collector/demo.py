@@ -7,7 +7,7 @@
 VLM 调用方式与 Ali GUIOwlWrapper 一致 (OpenAI client + smart_resize + base64).
 
 Usage:
-  # v1 — 搜索框进入
+  # v1 — 搜索框进入（打车页到即结束）
   .venv/bin/python -m collector.demo \\
       --address "西北旺万象汇" \\
       --adb-path /opt/homebrew/bin/adb \\
@@ -15,7 +15,7 @@ Usage:
       --vlm-base-url "https://ws-xxxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1" \\
       --flow v1
 
-  # v2 — 底部打车tab进入（需 --pickup 上车点）
+  # v2 — 底部打车tab进入 + 计价采集（内置 pricing_collect 步骤）
   .venv/bin/python -m collector.demo \\
       --address "西北旺万象汇" \\
       --pickup "北京西站" \\
@@ -23,14 +23,6 @@ Usage:
       --vlm-api-key "sk-xxx" \\
       --vlm-base-url "https://ws-xxxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1" \\
       --flow v2
-
-  # 带计价采集
-  .venv/bin/python -m collector.demo \\
-      --address "西北旺万象汇" \\
-      --adb-path /opt/homebrew/bin/adb \\
-      --vlm-api-key "sk-xxx" \\
-      --vlm-base-url "https://ws-xxxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1" \\
-      --flow v1 --collect
 """
 
 import argparse
@@ -46,7 +38,6 @@ if str(_THIS_DIR.parent) not in sys.path:
 
 from collector.adb_utils import AdbTools
 from collector.flow_engine import FlowEngine
-from collector.ride_pricing import RidePricingFSM
 from collector.vlm_grounder import VLMGrounder
 
 
@@ -80,10 +71,6 @@ def main() -> None:
                         help="截图输出目录 (默认: ./output)")
     parser.add_argument("--quiet", action="store_true",
                         help="静默模式")
-    parser.add_argument("--collect", action="store_true",
-                        help="进入打车页后执行计价采集子流程")
-    parser.add_argument("--supplier", default="经济型",
-                        help="要采集的供应商名称 (默认: 经济型)")
     parser.add_argument("--image-max-pixels", type=int, default=400000,
                         help="截图最大像素数 (默认: 400000)")
 
@@ -131,6 +118,11 @@ def main() -> None:
         print(f"❌ Flow 文件不存在: {flow_file}")
         sys.exit(1)
 
+    # ── 加载 Profile ──
+    profile_path = str(_THIS_DIR / "profiles" / "gaode.json")
+    with open(profile_path, "r", encoding="utf-8") as f:
+        profile_cfg = json.load(f)
+
     engine = FlowEngine(
         adb=adb,
         grounder=grounder,
@@ -138,6 +130,7 @@ def main() -> None:
         vars_=flow_vars,
         output_dir=args.output_dir,
         verbose=not args.quiet,
+        profile_cfg=profile_cfg,
     )
 
     t_start = time.time()
@@ -156,38 +149,6 @@ def main() -> None:
     print(f"\n[Flow] 耗时: {elapsed:.1f}s")
     print(f"[Flow] VLM: {engine.stats['vlm_calls']} 次调用, "
           f"失败: {engine.stats['vlm_failures']}")
-
-    # ── 计价采集子流程 ──
-    if args.collect:
-        print("\n" + "=" * 60)
-        print("  计价规则采集流程")
-        print("=" * 60)
-
-        profile_path = str(_THIS_DIR / "profiles" / "gaode.json")
-        with open(profile_path, "r", encoding="utf-8") as f:
-            profile_cfg = json.load(f)
-
-        pricer = RidePricingFSM(
-            adb=adb,
-            grounder=grounder,
-            supplier=args.supplier,
-            profile_cfg=profile_cfg,
-            output_dir=args.output_dir,
-            verbose=not args.quiet,
-        )
-
-        t2 = time.time()
-        try:
-            results = pricer.run()
-            print(f"\n[Pricing] 截图: {len(results)} 张")
-        except KeyboardInterrupt:
-            print("\n⚠ 用户中断")
-        except Exception as e:
-            print(f"\n❌ 计价采集出错: {e}")
-            import traceback
-            traceback.print_exc()
-
-        print(f"\n[Pricing] 耗时: {time.time() - t2:.1f}s")
 
 
 if __name__ == "__main__":

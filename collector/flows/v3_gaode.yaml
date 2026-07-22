@@ -141,7 +141,7 @@ steps:
       - "yes.png"
       - "false.png"
     ground:
-      element_desc: "回到打车页面，找「经济型」分组标题右边'全选经济'文字右侧的勾选圆圈控件。参考图1 yes.png 已勾选，图2 false.png 未勾选。\n\n**必须**在Action首行以 EXACT 格式输出: SELECTED=true 或 SELECTED=false\n如果未选中(SELECTED=false)，返回 bbox 和中心坐标。如果已选中(SELECTED=true)，bbox 填 [0,0,0,0]。"
+      element_desc: "回到打车页面，在截图的下半部分找「经济型」分组标题右边'全选经济'文字右侧的勾选方框控件。参考图1 yes.png 已勾选，图2 false.png 未勾选。\n\n**必须**在Action首行以 EXACT 格式输出: SELECTED=true 或 SELECTED=false\n如果未选中(SELECTED=false)，返回 bbox 和中心坐标。如果已选中(SELECTED=true)，bbox 填 [0,0,0,0]。"
 
   # ── S7: 下滑直到「出租车」出现 ──
   - id: "scroll_to_taxi"

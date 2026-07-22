@@ -37,6 +37,7 @@ from PIL import Image, ImageDraw
 
 from .adb_utils import AdbTools
 from .vlm_grounder import VLMGrounder
+from .ride_pricing import RidePricingFSM
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +58,7 @@ class FlowEngine:
         vars_: dict[str, str] | None = None,
         output_dir: str = "./output",
         verbose: bool = True,
+        profile_cfg: dict[str, Any] | None = None,
     ):
         self.adb = adb
         self.grounder = grounder
@@ -64,6 +66,7 @@ class FlowEngine:
         self.verbose = verbose
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.profile_cfg = profile_cfg or {}
 
         with open(flow_path, "r", encoding="utf-8") as f:
             self.flow = self._deep_resolve(self.vars, f.read())
@@ -108,6 +111,8 @@ class FlowEngine:
                     self._do_wait(step)
                 elif step_type == "screenshot":
                     self._do_screenshot(step)
+                elif step_type == "pricing_collect":
+                    self._do_pricing_collect(step)
                 else:
                     self._log(f"  ⚠ 未知步骤类型: {step_type}")
             except StepFailed as e:
@@ -350,6 +355,24 @@ class FlowEngine:
 
     def _do_screenshot(self, step: dict) -> None:
         self._screenshot(step.get("id", "shot"))
+
+    def _do_pricing_collect(self, step: dict) -> None:
+        """委托给 RidePricingFSM 执行计价采集."""
+        supplier = step.get("supplier", "经济型")
+        self._log(f"── 计价采集: {supplier} ──")
+
+        pricer = RidePricingFSM(
+            adb=self.adb,
+            grounder=self.grounder,
+            supplier=supplier,
+            profile_cfg=self.profile_cfg,
+            output_dir=str(self.output_dir),
+            verbose=self.verbose,
+        )
+        pricer.run()
+        # 合并 VLM 统计
+        self.stats["vlm_calls"] += pricer.stats.get("vlm_calls", 0)
+        self.stats["vlm_failures"] += pricer.stats.get("vlm_failures", 0)
 
     # ------------------------------------------------------------------
     # VLM helpers

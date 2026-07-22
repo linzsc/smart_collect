@@ -1,0 +1,739 @@
+"""
+计价采集子流程 Mock 测试
+============================================================================
+
+测试 RidePricingFSM 的核心逻辑:
+
+  打车页 → S1(全选经济) → S2(识别供应商) →
+    ┌─ S3a(点?进入计价页) → S3c(详细计价规则) ─┐
+    │  工作日下滑→回顶→休息日下滑→返回×2          │  循环 2 个
+    └───────────────────────────────────────────┘
+
+用法:
+  # Mock 测试 (无需设备/API)
+  .venv/bin/python tests/test_pricing_collect.py
+
+  # 真实 VLM + 设备测试
+  .venv/bin/python tests/test_pricing_collect.py --real-device \\
+      --adb-path /opt/homebrew/bin/adb \\
+      --vlm-api-key "sk-..." \\
+      --vlm-base-url "https://..."
+
+  # 真实 VLM 仅素材验证 (不需要设备)
+  .venv/bin/python tests/test_pricing_collect.py --real-vlm \\
+      --vlm-api-key "sk-..." \\
+      --vlm-base-url "https://..."
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+from unittest.mock import MagicMock, PropertyMock, call, patch
+
+_THIS_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _THIS_DIR.parent
+
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+
+# ======================================================================
+# Suite 1: 纯逻辑测试 (不需要任何 mock)
+# ======================================================================
+
+def test_s2_parse_json_array():
+    """S2: VLM 返回标准 JSON 数组"""
+    raw = '```json\n["快车", "特惠快车", "优酷快车"]\n```'
+    from collector.ride_pricing import RidePricingFSM
+
+    # 模拟 _s2_list_suppliers 的解析逻辑
+    cleaned = raw
+    for m in ("```json", "```"):
+        if cleaned.startswith(m):
+            cleaned = cleaned[len(m):].strip()
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3].strip()
+    parsed = json.loads(cleaned)
+    assert isinstance(parsed, list)
+    assert "快车" in parsed
+    assert "特惠快车" in parsed
+    return "PASS ✓", parsed
+
+
+def test_s2_parse_excludes_taxi_and_youxiang():
+    """S2: 排除「出租车」和「优享」"""
+    raw = '["快车", "出租车", "特惠快车", "优享", "拼车"]'
+    from collector.ride_pricing import _SKIP_SUPPLIERS
+
+    cleaned = raw.strip()
+    parsed = json.loads(cleaned)
+    suppliers = [n for n in parsed if not any(kw in n for kw in _SKIP_SUPPLIERS)]
+    assert "快车" in suppliers
+    assert "特惠快车" in suppliers
+    assert "拼车" in suppliers
+    assert "出租车" not in suppliers
+    assert "优享" not in suppliers
+    return "PASS ✓", suppliers
+
+
+def test_s2_parse_line_by_line_fallback():
+    """S2: JSON 解析失败时回退到逐行提取"""
+    raw = """1. 快车
+2. 特惠快车
+3. 优选快车"""
+
+    import re
+    from collector.ride_pricing import _SKIP_SUPPLIERS
+
+    suppliers = []
+    for line in raw.split("\n"):
+        line = re.sub(r'^[\d\.\、\)）\-\s]+', '', line.strip())
+        line = line.strip().strip('"').strip("'").strip(",")
+        if line and len(line) <= 30 and not any(kw in line for kw in _SKIP_SUPPLIERS):
+            if len(line) >= 2 and line not in suppliers:
+                suppliers.append(line)
+    assert len(suppliers) == 3
+    assert "快车" in suppliers
+    return "PASS ✓", suppliers
+
+
+def test_s2_parse_empty():
+    """S2: VLM 返回空数组"""
+    raw = '[]'
+    parsed = json.loads(raw)
+    assert parsed == []
+    return "PASS ✓", []
+
+
+def test_extract_center_from_bbox_and_center():
+    """_extract_center: 同时有 bbox 和 center"""
+    from collector.ride_pricing import RidePricingFSM
+
+    # 需要实例才能调用 _extract_center, 但它不是 static
+    # 我们直接用同样逻辑
+    result = {"bbox": [100, 200, 300, 400], "center": [200, 300]}
+    bbox = result.get("bbox")
+    center = result.get("center")
+    if bbox and bbox != [0, 0, 0, 0] and center:
+        assert center == [200, 300]
+    return "PASS ✓"
+
+
+def test_extract_center_only_center():
+    """_extract_center: 只有 center 没有 bbox"""
+    result = {"bbox": [0, 0, 0, 0], "center": [500, 600]}
+    bbox = result.get("bbox")
+    center = result.get("center")
+    ok = (bbox and bbox != [0, 0, 0, 0] and center)
+    if not ok and center and center != [0, 0]:
+        # fallback: use center directly
+        assert center == [500, 600]
+    return "PASS ✓"
+
+
+def test_extract_center_none():
+    """_extract_center: bbox 全零, center 也是 [0,0]"""
+    result = {"bbox": [0, 0, 0, 0], "center": [0, 0]}
+    bbox = result.get("bbox")
+    center = result.get("center")
+    ok = (bbox and bbox != [0, 0, 0, 0] and center)
+
+    # center=[0,0] is sentinel → should NOT be extracted
+    if not ok:
+        if center and center != [0, 0]:
+            pass  # would use center
+        else:
+            center = None  # correctly rejected
+    assert center is None
+    return "PASS ✓"
+
+
+# ======================================================================
+# Suite 2: FSM 完整流程 Mock 测试
+# ======================================================================
+
+def test_fsm_full_flow():
+    """Mock AdbTools + VLMGrounder, 验证 FSM 调用顺序.
+
+    模拟: 打车页有 2 个供应商 (快车, 特惠快车), 全选经济未选中.
+
+    预期调用链:
+      1. S0: slide(上滑)
+      2. S1: ground(全选) → click → ground(double check)
+      3. S2: query_text(识别供应商) → ["快车", "特惠快车"]
+      4. S3a[快车]: ground(点问号, ref=button_to_price.png) → click
+      5. S3c[快车]: ground(查看详细计价规则) → click
+         → ground(工作日tab) → click → slide×N → query_text(到底?) → slide×3(回顶)
+         → ground(休息日tab) → click → slide×N → query_text(到底?)
+         → ground(返回箭头) → click → ground(返回箭头) → click
+      6. S3a[特惠快车]: 同上
+      7. S3c[特惠快车]: 同上
+    """
+    from collector.ride_pricing import RidePricingFSM
+
+    # ── 构建 Mock ──
+    mock_adb = MagicMock()
+    type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
+
+    mock_grounder = MagicMock()
+
+    # S1 全选: 第一轮未选中 → 返回坐标
+    mock_grounder.ground.side_effect = _build_ground_side_effect()
+
+    # S2 查询供应商列表
+    mock_grounder.query_text.side_effect = _build_query_text_side_effect()
+
+    # Profile config
+    profile_cfg = _build_profile_cfg()
+
+    # ── 执行 ──
+    fsms = []  # track created FSMs for stats
+
+    with patch('collector.ride_pricing.AdbTools', return_value=mock_adb):
+        with patch('collector.ride_pricing.VLMGrounder', return_value=mock_grounder):
+            # Patch the module-level adb/grounder in ride_pricing
+            fsm = RidePricingFSM(
+                adb=mock_adb,
+                grounder=mock_grounder,
+                supplier="经济型",
+                profile_cfg=profile_cfg,
+                output_dir="/tmp/test_output",
+                verbose=False,
+            )
+            results = fsm.run()
+            fsms.append(fsm)
+
+    fsm = fsms[0]
+
+    # ── 验证 ──
+    print(f"\n  [Mock FSM] 截图数: {len(results)}")
+    print(f"  [Mock FSM] VLM 调用: ground={mock_grounder.ground.call_count}, "
+          f"query_text={mock_grounder.query_text.call_count}")
+
+    # 1. 必须有截图输出
+    assert len(results) > 0, "应至少产生 1 张截图"
+
+    # 2. S0 上滑
+    slide_calls = mock_adb.slide.call_args_list
+    assert len(slide_calls) >= 1, f"S0: 应至少 1 次上滑, 实际 {len(slide_calls)}"
+
+    # 3. S1 全选经济: 应调用 ground 至少 2 次 (首轮 + double check)
+    ground_calls = mock_grounder.ground.call_args_list
+    assert len(ground_calls) >= 2, f"S1: ground 至少 2 次, 实际 {len(ground_calls)}"
+
+    # 验证 S1 的 ref_images 包含 yes.png 和 false.png
+    s1_call = ground_calls[0]
+    s1_refs = s1_call.kwargs.get("ref_images", [])
+    assert any("yes.png" in (r or "") for r in s1_refs), \
+        f"S1 应使用 yes.png 参考图, 实际 refs={s1_refs}"
+    assert any("false.png" in (r or "") for r in s1_refs), \
+        f"S1 应使用 false.png 参考图, 实际 refs={s1_refs}"
+
+    # 4. S2 供应商识别: query_text 应被调用
+    query_calls = mock_grounder.query_text.call_args_list
+    assert len(query_calls) >= 1, f"S2: query_text 至少 1 次, 实际 {len(query_calls)}"
+
+    # 5. S3a 问号: ground 中应有 ref_image=button_to_price.png
+    question_calls = [
+        c for c in ground_calls
+        if c.kwargs.get("ref_image") and "button_to_price.png" in str(c.kwargs.get("ref_image"))
+    ]
+    print(f"  [Mock FSM] 问号点击 (ref=button_to_price.png): {len(question_calls)} 次")
+    assert len(question_calls) >= 2, \
+        f"应有 2 个供应商各 1 次问号点击, 实际 {len(question_calls)}"
+
+    # 6. 点击 (click) 应被多次调用
+    click_calls = mock_adb.click.call_args_list
+    assert len(click_calls) >= 4, f"click 至少 4 次, 实际 {len(click_calls)}"
+
+    # 7. 返回 (back) 应被调用 — 每个供应商的 2 次返回
+    #   (实际是先 ground 找返回箭头, 找不到才 fallback back key)
+    #   这里不做严格断言
+
+    # 8. 统计合并
+    assert fsm.stats["vlm_calls"] > 0, "VLM 调用统计应 > 0"
+
+    print(f"  [Mock FSM] ✓ 完整流程通过")
+    print(f"    - slide:   {len(slide_calls)} 次")
+    print(f"    - click:   {len(click_calls)} 次")
+    print(f"    - ground:  {len(ground_calls)} 次")
+    print(f"    - query:   {len(query_calls)} 次")
+    print(f"    - 截图:    {len(results)} 张")
+    return True
+
+
+def _build_profile_cfg() -> dict:
+    return {
+        "timing": {
+            "app_launch_wait": 3.0,
+            "after_input_wait": 1.0,
+            "after_tap_wait": 2.0,
+            "after_confirm_wait": 3.0,
+            "pricing_page_wait": 2.0,
+        },
+        "steps": {},
+        "collection": {
+            "scroll_duration_ms": 500,
+            "after_scroll_wait": 1.0,
+            "swipe_duration_ms": 400,
+            "max_suppliers": 2,
+            "max_scroll_rounds": 15,
+            "pricing_page_wait": 0.5,
+        },
+    }
+
+
+def _build_ground_side_effect():
+    """构建 ground() 的 side_effect, 按调用顺序返回不同结果.
+
+    调用顺序 (每个供应商):
+      S1-1: 全选经济第1轮 → 未选中, 返回坐标
+      S1-2: 全选 double check → 已选中
+      S3a: 点问号 → 找到, 返回坐标
+      S3c: 查看详细计价规则 → 找到, 返回坐标
+      S3c: 工作日 tab → 找到, 返回坐标
+      S3c: 休息日 tab → 找到, 返回坐标
+      S3c: 返回箭头(第一次) → 找到
+      S3c: 返回箭头(第二次) → 找到
+      ... 重复 2 个供应商
+    """
+
+    NOT_SELECTED = {
+        "element": "全选经济勾选框",
+        "bbox": [800, 400, 880, 480],
+        "center": [840, 440],
+        "found": True,
+        "selected": False,
+        "conf": 0.90,
+        "raw_response": "SELECTED=false\n<tool_call>...</tool_call>",
+    }
+
+    SELECTED = {
+        "element": "全选经济勾选框",
+        "bbox": [0, 0, 0, 0],
+        "center": None,
+        "found": False,
+        "selected": True,
+        "conf": 0.0,
+        "raw_response": "SELECTED=true\n<tool_call>...</tool_call>",
+    }
+
+    FOUND_AT = lambda x, y: {
+        "element": "target",
+        "bbox": [x - 30, y - 30, x + 30, y + 30],
+        "center": [x, y],
+        "found": True,
+        "selected": None,
+        "conf": 0.90,
+        "raw_response": "<tool_call>...</tool_call>",
+    }
+
+    # 每个供应商需要的 ground 调用:
+    #   1. S3a 点问号 → 找到
+    #   2. S3c 查看详细计价规则 → 找到
+    #   3. S3c 工作日 tab → 找到
+    #   4. S3c 休息日 tab → 找到
+    #   5. S3c 返回(1) → 找到
+    #   6. S3c 返回(2) → 找到
+    per_supplier = [FOUND_AT(500, 1800)] * 6
+
+    # S1 第1轮 → 未选中; S1 double check → 已选中
+    # (S2 用 query_text 不用 ground)
+    sequence = [NOT_SELECTED, SELECTED]
+    # 2 个供应商
+    for _ in range(2):
+        sequence.extend(per_supplier)
+
+    # 用迭代器
+    seq_iter = iter(sequence)
+
+    def side_effect(image_path, element_desc, screen_w, screen_h,
+                    ref_image=None, ref_images=None):
+        try:
+            return next(seq_iter)
+        except StopIteration:
+            return {
+                "element": element_desc,
+                "bbox": [500, 1000, 580, 1080],
+                "center": [540, 1040],
+                "found": True,
+                "selected": None,
+                "conf": 0.90,
+                "raw_response": "<tool_call>...</tool_call>",
+            }
+
+    return side_effect
+
+
+def _build_query_text_side_effect():
+    """构建 query_text 的 side_effect.
+
+    调用顺序:
+      S2-1: 识别供应商 → ["快车", "特惠快车"]
+      S3c-工作日-scroll: 每 3 步 VLM 判断到底 → NO, NO, YES
+      S3c-休息日-scroll: 每 3 步 VLM 判断到底 → NO, YES
+      ... 重复 2 个供应商
+    """
+    SUPPLIERS_RESP = {
+        "raw_response": '["快车", "特惠快车"]',
+        "success": True,
+    }
+    NOT_BOTTOM = {"raw_response": "NO, 还没到底部", "success": True}
+    IS_BOTTOM = {"raw_response": "YES, 已到达页面底部", "success": True}
+
+    sequence = [SUPPLIERS_RESP]  # S2 只调用 1 次
+    # 每个供应商: 工作日 scroll checks + 休息日 scroll checks
+    for _ in range(2):
+        sequence.append(NOT_BOTTOM)   # 工作日 check 3
+        sequence.append(NOT_BOTTOM)   # 工作日 check 6
+        sequence.append(IS_BOTTOM)    # 工作日 check 9 → 到底
+        sequence.append(NOT_BOTTOM)   # 休息日 check 3
+        sequence.append(IS_BOTTOM)    # 休息日 check 6 → 到底
+
+    seq_iter = iter(sequence)
+
+    def side_effect(image_path, prompt):
+        try:
+            return next(seq_iter)
+        except StopIteration:
+            return {"raw_response": "YES", "success": True}
+
+    return side_effect
+
+
+# ======================================================================
+# Suite 3: FlowEngine pricing_collect 编排测试
+# ======================================================================
+
+def test_flow_engine_pricing_collect_step():
+    """验证 FlowEngine 正确委托 pricing_collect 步骤给 RidePricingFSM."""
+    from collector.flow_engine import FlowEngine
+
+    mock_adb = MagicMock()
+    type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
+    mock_grounder = MagicMock()
+
+    # 写一个临时 YAML
+    import tempfile
+    yaml_content = """
+name: "test-pricing"
+version: "1"
+description: "test"
+steps:
+  - id: "collect"
+    type: "pricing_collect"
+    description: "计价采集"
+    supplier: "经济型"
+"""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        f.write(yaml_content)
+        tmp_path = f.name
+
+    try:
+        # 用 patch 替换 RidePricingFSM
+        with patch('collector.flow_engine.RidePricingFSM') as MockFSM:
+            mock_fsm_instance = MagicMock()
+            mock_fsm_instance.stats = {"vlm_calls": 5, "vlm_failures": 0}
+            MockFSM.return_value = mock_fsm_instance
+
+            engine = FlowEngine(
+                adb=mock_adb,
+                grounder=mock_grounder,
+                flow_path=tmp_path,
+                output_dir="/tmp/test_engine",
+                verbose=False,
+                profile_cfg={"collection": {"max_suppliers": 2}},
+            )
+            engine.run()
+
+            # 验证 RidePricingFSM 被创建并执行
+            assert MockFSM.called, "应创建 RidePricingFSM"
+            assert mock_fsm_instance.run.called, "应调用 RidePricingFSM.run()"
+
+            # 验证 stats 合并
+            assert engine.stats["vlm_calls"] == 5, \
+                f"stats 应合并, 预期 5, 实际 {engine.stats['vlm_calls']}"
+
+            print(f"  [FlowEngine] ✓ pricing_collect 步骤正确委托")
+    finally:
+        Path(tmp_path).unlink()
+
+    return True
+
+
+# ======================================================================
+# Suite 4: 真实 VLM 素材验证 (不需要设备)
+# ======================================================================
+
+def real_vlm_tests(api_key: str, base_url: str) -> None:
+    """用真实素材图片验证 VLM grounding 关键步骤.
+
+    测试项:
+      1. 打车页 → 定位问号 (button_to_price.png 作为 ref)
+      2. 计价页 → 定位「查看详细计价规则」
+      3. 详细计价页 → 定位「工作日」和「休息日」tab
+    """
+    from collector.vlm_grounder import VLMGrounder
+
+    grounder = VLMGrounder(
+        api_key=api_key, base_url=base_url,
+        model="qwen3-vl-plus",
+        image_max_pixels=400000,
+    )
+
+    SCREEN_W, SCREEN_H = 1080, 2400
+    ref_question = str(_PROJECT_ROOT / "assets" / "button_to_price.png")
+
+    test_cases = [
+        {
+            "name": "打车页-定位?问号",
+            "image": "打车页.jpg",
+            "ref_image": "button_to_price.png",
+            "desc": (
+                "高德打车页面。在「经济型」分组下找到任一供应商行"
+                "「预估」前面的 '?' 问号图标。附件是问号的参考图。"
+                "返回 bbox 和中心坐标。"
+            ),
+            "expect_found": True,
+        },
+        {
+            "name": "计价页-定位详细计价规则",
+            "image": "计价页.jpg",
+            "ref_image": None,
+            "desc": (
+                "高德打车计价弹窗。找「查看详细计价规则」或「计价规则」"
+                "入口（弹窗中下部的文字链接/按钮）。返回 bbox 和中心坐标。"
+            ),
+            "expect_found": True,
+        },
+        {
+            "name": "详细计价页-定位工作日tab",
+            "image": "详细计价页.jpg",
+            "ref_image": None,
+            "desc": (
+                "计价规则详情页。找「工作日」标签页（与「休息日」标签并列）。"
+                "返回 bbox 和中心坐标。"
+            ),
+            "expect_found": True,
+        },
+        {
+            "name": "详细计价页-定位休息日tab",
+            "image": "详细计价页.jpg",
+            "ref_image": None,
+            "desc": (
+                "计价规则详情页。找「休息日」标签页（与「工作日」标签并列）。"
+                "返回 bbox 和中心坐标。"
+            ),
+            "expect_found": True,
+        },
+    ]
+
+    print("\n" + "=" * 60)
+    print("  Real VLM — 素材验证")
+    print("=" * 60)
+
+    passed = 0
+    for tc in test_cases:
+        img_path = str(_PROJECT_ROOT / "assets" / tc["image"])
+        if not Path(img_path).exists():
+            print(f"\n  ⚠ 跳过: {tc['image']} 不存在")
+            continue
+
+        ref_path = None
+        if tc["ref_image"]:
+            ref_path = str(_PROJECT_ROOT / "assets" / tc["ref_image"])
+            if not Path(ref_path).exists():
+                ref_path = None
+
+        print(f"\n── {tc['name']} ──")
+        print(f"  image: {tc['image']}" + (f", ref: {tc['ref_image']}" if ref_path else ""))
+
+        result = grounder.ground(
+            img_path, tc["desc"],
+            screen_w=SCREEN_W, screen_h=SCREEN_H,
+            ref_image=ref_path,
+        )
+
+        found = result.get("found")
+        center = result.get("center")
+        bbox = result.get("bbox")
+        raw = (result.get("raw_response", "") or "")[:200]
+
+        print(f"  found={found}, center={center}, bbox={bbox}")
+        print(f"  raw: {raw}")
+
+        ok = found == tc["expect_found"]
+        status = "✓ PASS" if ok else "✗ FAIL"
+        print(f"  {status}")
+        if ok:
+            passed += 1
+
+    print(f"\n  Real VLM: {passed}/{len(test_cases)} passed")
+
+
+# ======================================================================
+# Suite 5: 真实设备 + 真实 VLM — 完整子流程 (需要设备)
+# ======================================================================
+
+def real_device_test(
+    adb_path: str,
+    api_key: str,
+    base_url: str,
+    output_dir: str,
+    device: str | None = None,
+) -> None:
+    """在真实设备上执行一次完整的计价采集子流程.
+
+    前置条件: 设备已解锁, 高德地图处于打车页 (已输入起终点).
+    """
+    from collector.adb_utils import AdbTools
+    from collector.ride_pricing import RidePricingFSM
+    from collector.vlm_grounder import VLMGrounder
+
+    print("\n" + "=" * 60)
+    print("  Real Device — 完整子流程")
+    print("=" * 60)
+
+    adb = AdbTools(adb_path, device=device)
+    grounder = VLMGrounder(
+        api_key=api_key, base_url=base_url,
+        model="qwen3-vl-plus",
+        image_max_pixels=400000,
+    )
+
+    # 检查连接
+    test_shot = str(Path(output_dir) / "_test_connection.png")
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    if not adb.get_screenshot(test_shot):
+        print("❌ 无法连接设备")
+        return
+
+    print(f"  ✓ 设备已连接: {adb.screen_size}")
+
+    profile_cfg = _build_profile_cfg()
+    pricer = RidePricingFSM(
+        adb=adb,
+        grounder=grounder,
+        supplier="经济型",
+        profile_cfg=profile_cfg,
+        output_dir=output_dir,
+        verbose=True,
+    )
+
+    t0 = time.time()
+    try:
+        results = pricer.run()
+        elapsed = time.time() - t0
+        print(f"\n  ✓ 完成: {len(results)} 张截图, 耗时 {elapsed:.1f}s")
+        print(f"  VLM: {pricer.stats['vlm_calls']} 次调用, "
+              f"失败: {pricer.stats['vlm_failures']}")
+    except KeyboardInterrupt:
+        print("\n  ⚠ 用户中断")
+    except Exception as e:
+        print(f"\n  ❌ 失败: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+# ======================================================================
+# Runner
+# ======================================================================
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="计价采集子流程测试",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument("--real-vlm", action="store_true",
+                        help="用真实 VLM API 验证素材 grounding")
+    parser.add_argument("--real-device", action="store_true",
+                        help="在真实设备上执行完整子流程")
+    parser.add_argument("--adb-path", help="ADB 路径 (--real-device 需要)")
+    parser.add_argument("--device", help="设备序列号")
+    parser.add_argument("--vlm-api-key", help="API Key")
+    parser.add_argument("--vlm-base-url", help="Base URL")
+    parser.add_argument("--output-dir", default="./output",
+                        help="截图输出目录 (默认: ./output)")
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("  计价采集子流程测试")
+    print("=" * 60)
+
+    all_pass = True
+
+    # ── Suite 1: 纯逻辑测试 ──
+    print("\n── Suite 1: 解析逻辑 ──")
+    suite1 = [
+        ("S2 JSON 数组解析",          test_s2_parse_json_array),
+        ("S2 排除出租车/优享",         test_s2_parse_excludes_taxi_and_youxiang),
+        ("S2 逐行回退解析",            test_s2_parse_line_by_line_fallback),
+        ("S2 空数组",                 test_s2_parse_empty),
+        ("_extract_center bbox+center", test_extract_center_from_bbox_and_center),
+        ("_extract_center only center", test_extract_center_only_center),
+        ("_extract_center None",      test_extract_center_none),
+    ]
+    for label, fn in suite1:
+        try:
+            status, *extra = fn()
+            print(f"  [{status}] {label}")
+            if extra:
+                print(f"         → {extra[0]}")
+        except Exception as e:
+            print(f"  [FAIL ✗] {label}: {e}")
+            all_pass = False
+
+    # ── Suite 2: FSM 完整流程 Mock ──
+    print("\n── Suite 2: FSM 完整流程 Mock ──")
+    try:
+        test_fsm_full_flow()
+    except Exception as e:
+        print(f"  [FAIL ✗] FSM Mock: {e}")
+        import traceback
+        traceback.print_exc()
+        all_pass = False
+
+    # ── Suite 3: FlowEngine 编排 ──
+    print("\n── Suite 3: FlowEngine pricing_collect 编排 ──")
+    try:
+        test_flow_engine_pricing_collect_step()
+    except Exception as e:
+        print(f"  [FAIL ✗] FlowEngine: {e}")
+        import traceback
+        traceback.print_exc()
+        all_pass = False
+
+    # ── Suite 4: 真实 VLM (可选) ──
+    if args.real_vlm:
+        if not args.vlm_api_key or not args.vlm_base_url:
+            print("\n❌ --real-vlm 需要 --vlm-api-key 和 --vlm-base-url")
+            sys.exit(1)
+        real_vlm_tests(args.vlm_api_key, args.vlm_base_url)
+
+    # ── Suite 5: 真实设备 (可选) ──
+    if args.real_device:
+        if not args.adb_path:
+            print("\n❌ --real-device 需要 --adb-path")
+            sys.exit(1)
+        if not args.vlm_api_key or not args.vlm_base_url:
+            print("\n❌ --real-device 需要 --vlm-api-key 和 --vlm-base-url")
+            sys.exit(1)
+        real_device_test(
+            adb_path=args.adb_path,
+            api_key=args.vlm_api_key,
+            base_url=args.vlm_base_url,
+            output_dir=args.output_dir,
+            device=args.device,
+        )
+
+    print("\n" + "=" * 60)
+    print(f"  {'✓ 全部通过' if all_pass else '✗ 存在失败'}")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()

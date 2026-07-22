@@ -80,9 +80,8 @@ steps:
       retry_alt_descs:
         - "搜索结果中排在第一行的目的地条目"
 
-  # ── 4. 打车页上滑 ──
-  - id: "s0_scroll_up"
-    type: "scroll"
-    description: "向上滑动拉出下方内容"
-    direction: "up"
-    repeat: 2
+  # ── 4. 打车页就位，启动计价采集 ──
+  - id: "pricing_collect"
+    type: "pricing_collect"
+    description: "全选经济 → 循环采集2个供应商的详细计价规则"
+    supplier: "经济型"
