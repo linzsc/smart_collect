@@ -51,6 +51,8 @@ v2 / v3 需要 `--pickup`，v1 从当前位置出发。
 
 进入打车页后自动执行：全选经济型 → 逐个供应商点击问号 → 工作日/休息日计价规则截图。
 
+全选勾选采用**目标锚定的幂等全选**（SEL-01）：定位「全选/全选经济」文字右侧同一行的主勾选框 → 裁剪 ROI 本地判定 → 未勾选才点击 → 点击后重新定位并验证为已勾选，无法证明状态正确时停止。
+
 ## 项目结构
 
 ```
@@ -113,6 +115,7 @@ output/                # 运行时输出（截图 + 标注）
 ```bash
 # Mock 测试（无需设备/API）
 .venv/bin/python tests/test_double_check.py
+.venv/bin/python tests/test_select_all.py   # SEL-01 全选勾选框（含素材 100 次成功率）
 
 # 真实 VLM 测试（需 API key）
 .venv/bin/python tests/test_double_check.py --real-vlm \

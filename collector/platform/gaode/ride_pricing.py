@@ -224,65 +224,31 @@ class RidePricingFSM:
     # ==================================================================
 
     def _s1_tap_select_all(self) -> None:
-        self._log("S1: 检查全选经济")
-        shot = self._shot("s1_select_all")
-        sw, sh = self._screen_size
-        root_dir = Path(__file__).resolve().parents[3]  # <root>
-        ref_yes = str(root_dir / "assets" / "yes.png")
-        ref_no = str(root_dir / "assets" / "false.png")
+        """S1: 幂等确保「全选经济」已勾选（SEL-01 目标锚定）。
 
-        desc = (
-            "高德打车页面。请严格按照以下步骤操作：\n\n"
-            "1. **先定位「全选经济」这四个字**，确认它在截图中的位置。\n"
-            "   它通常在页面偏中部靠右，是一个分组筛选区的标题。\n\n"
-            "2. **只看「全选经济」文字右侧紧挨着的勾选方框**，"
-            "不要看其他任何供应商行右边的元素。\n\n"
-            "3. 对比附件2张参考图判断该圆圈的勾选状态：\n"
-            "   图1 yes.png = 已勾选(蓝底白勾✓)\n"
-            "   图2 false.png = 未勾选(灰色空心圆○)\n\n"
-            "**严格要求**：\n"
-            "- 勾选圆圈必须在「全选经济」这四个字**同一行的右侧**，距离不超过两个字宽\n"
-            "- 不要把供应商行（如快车、特惠快车）右边的图标当成目标\n"
-            "- **必须**在Action首行以 EXACT 格式输出: SELECTED=true 或 SELECTED=false\n"
-            "- SELECTED=false → 返回该勾选圆圈的 bbox 和中心坐标\n"
-            "- SELECTED=true → bbox [0,0,0,0]"
-        )
-        self.stats["vlm_calls"] += 1
-        result = self.grounder.ground(shot, desc, screen_w=sw, screen_h=sh,
-                                       ref_images=[ref_yes, ref_no])
+        定位「全选经济」文字 → 定位右侧同一行主勾选框 → 裁剪 ROI 分类 →
+        未勾选才点击 → 重新截图 → 重新验证同一勾选框为 CHECKED。
+        """
+        from collector.platform.gaode.select_all import SelectAllError, ensure_all_selected
 
-        # 使用 _parse 统一返回的 selected 字段
-        already_selected = result.get("selected") is True
-
-        if already_selected:
-            self._log("  ✓ VLM 判断: 已选中")
-        else:
-            self._log("  ○ VLM 判断: 未选中 → 点击勾选圆圈")
-            cx, cy = self._extract_center(result)
-            if cx is not None:
-                self._annotate_click(shot, "s1_click", result.get("bbox"), cx, cy)
-                self.adb.click(cx, cy)
-                self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
-
-        # ── double check: 不论是否点击，截图再次验证 ──
-        self._log("  🔍 Double check: 再次验证全选状态")
-        shot2 = self._shot("s1_doublecheck")
-        self.stats["vlm_calls"] += 1
-        result2 = self.grounder.ground(shot2, desc, screen_w=sw, screen_h=sh,
-                                        ref_images=[ref_yes, ref_no])
-
-        confirmed = result2.get("selected") is True
-
-        if confirmed:
-            self._log("  ✓ Double check: 已选中 ✓")
-            self._annotate_action_label(shot2, "s1_doublecheck_ok", "CONFIRMED SELECTED")
-        else:
-            self._log("  ⚠ Double check: 仍未选中，再次点击")
-            cx2, cy2 = self._extract_center(result2)
-            if cx2 is not None:
-                self._annotate_click(shot2, "s1_click_retry", result2.get("bbox"), cx2, cy2)
-                self.adb.click(cx2, cy2)
-                self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
+        self._log("S1: 确保全选经济已勾选（目标锚定）")
+        try:
+            result = ensure_all_selected(
+                adb=self.adb,
+                grounder=self.grounder,
+                label="全选经济",
+                screen_size=self._screen_size,
+                expected_region=self.collection_cfg.get("select_all_region"),
+                screenshot=self._shot,
+                stats=self.stats,
+                verbose=self.verbose,
+                wait_after_click=self.timing.get("after_tap_wait", 2.0),
+            )
+        except SelectAllError as e:
+            # 无法证明状态正确 → 停止并保留现场（codex.md §2.2）
+            self._log(f"  ✗ 全选经济失败: {e}")
+            raise
+        self._log(f"  ✓ 全选经济: {result.state} @ {result.checkbox_bbox}")
 
     # ==================================================================
     # S2

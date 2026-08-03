@@ -19,3 +19,7 @@ output/
 
 # 真机测试脚本（内含 API Key，勿提交）
 run_real_test.txt
+
+# 真机截图素材（勿提交）
+assets/select_all_yes/
+assets/select_all_no/

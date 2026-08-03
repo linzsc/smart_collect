@@ -174,8 +174,19 @@ def test_doublecheck_decision_logic():
 # ======================================================================
 
 def real_vlm_tests(api_key: str, base_url: str) -> None:
-    """用 3 张真实素材图 + yes/false 参考图测试 VLM."""
+    """真实 VLM 测试：目标锚定的全选状态判定（SEL-01 四张素材）。
+
+    期望：
+      prices_box_all_no.jpg    → UNCHECKED
+      prices_box_some_yes.jpg  → UNCHECKED（子项已选 ≠ 全选已选）
+      prices_box_all_yes.jpg   → CHECKED
+      打车页.jpg("全选经济")     → UNCHECKED（即使子项已勾选）
+    """
+    from PIL import Image as _PILImage
+
+    from collector.domain.checkbox import CheckboxState
     from collector.infrastructure.vision.vlm_grounder import VLMGrounder
+    from collector.platform.gaode.select_all import detect_select_all_state
 
     grounder = VLMGrounder(
         api_key=api_key, base_url=base_url,
@@ -183,73 +194,43 @@ def real_vlm_tests(api_key: str, base_url: str) -> None:
         image_max_pixels=400000,
     )
 
-    ref_yes = str(_PROJECT_ROOT / "assets" / "yes.png")
-    ref_no = str(_PROJECT_ROOT / "assets" / "false.png")
-
-    desc = (
-        "在当前截图的白底弹窗/盒子页中找到「全选」勾选控件。"
-        "勾选控件是'全选'文字右边的圆形勾选框。"
-        "参考附件图1 yes.png（已勾选蓝底白勾）和图2 false.png（未勾选灰色空心圆）。"
-        "判断勾选框当前状态：\n"
-        "1. Action 首行输出 SELECTED=true 或 SELECTED=false\n"
-        "2. SELECTED=false → 返回勾选圆圈的 bbox 和中心坐标\n"
-        "3. SELECTED=true → bbox [0,0,0,0], coordinate [0,0]"
-    )
-
-    test_images = [
-        ("prices_box_all_no.jpg", "全未选 → 预期 SELECTED=false, 返回坐标"),
-        ("prices_box_all_yes.jpg", "全已选 → 预期 SELECTED=true, skip"),
-        ("prices_box_some_yes.jpg",
-         "部分选 → 全选可能是 indeterminate 状态(视觉上蓝底=selected=true)，click toggle 无害"),
+    # (文件名, label, 期望状态, 说明)
+    test_cases = [
+        ("prices_box_all_no.jpg", "全选", CheckboxState.UNCHECKED, "全未选"),
+        ("prices_box_some_yes.jpg", "全选", CheckboxState.UNCHECKED, "子项已选但全选未勾"),
+        ("prices_box_all_yes.jpg", "全选", CheckboxState.CHECKED, "全已选"),
+        ("打车页.jpg", "全选经济", CheckboxState.UNCHECKED, "打车页全选经济(即使子项已勾)"),
     ]
 
     print("\n" + "=" * 60)
-    print("  Real VLM API Tests")
+    print("  Real VLM Tests (SEL-01 目标锚定全选)")
     print("=" * 60)
 
     passed = 0
-    expected = 0  # 严格预期通过数
-    for fname, expectation in test_images:
+    for fname, label, expected, note in test_cases:
         img_path = str(_PROJECT_ROOT / "assets" / fname)
         if not Path(img_path).exists():
             print(f"\n  ⚠ 跳过: {fname} 不存在")
             continue
 
-        print(f"\n── 测试: {fname} ({expectation})")
-        result = grounder.ground(
-            img_path, desc,
-            screen_w=SCREEN_W, screen_h=SCREEN_H,
-            ref_images=[ref_yes, ref_no],
+        size = _PILImage.open(img_path).size  # 用实际图片尺寸做归一化
+        print(f"\n── 测试: {fname} ({note}) label={label} 期望={expected.value}")
+
+        state, target = detect_select_all_state(
+            img_path, label=label, screen_size=size, grounder=grounder,
         )
 
-        raw = result.get("raw_response", "")
-        selected = result.get("selected")
-        found = result.get("found")
-        center = result.get("center")
+        print(f"  state={state.value} | target_found={target.target_found} "
+              f"| relation={target.relation_valid}")
+        print(f"  checkbox_bbox={target.checkbox_bbox} | reason={target.reason or '-'}")
 
-        print(f"  VLM raw: {raw[:250]}")
-        print(f"  _parse: selected={selected} found={found} center={center}")
-
-        # all_no → selected=false with coords
-        # all_yes → selected=true
-        # some_yes → could go either way (indeterminate UI state)
-        if fname == "prices_box_all_no.jpg":
-            ok = (selected is False and found and center is not None)
-        elif fname == "prices_box_all_yes.jpg":
-            ok = (selected is True)
-        else:
-            # some_yes: both outcomes acceptable
-            ok = (selected is not None and found and center is not None)
-            if not ok:
-                print(f"  ⚠ some_yes indeterminate — selected={selected} found={found} (acceptable either way)")
-                ok = True  # not a hard failure
-
+        ok = state == expected
         status = "✓ PASS" if ok else "✗ FAIL"
         print(f"  Result: {status}")
         if ok:
             passed += 1
 
-    print(f"\n  Real VLM: {passed}/{len(test_images)} passed")
+    print(f"\n  Real VLM (SEL-01): {passed}/{len(test_cases)} passed")
 
 
 # ======================================================================

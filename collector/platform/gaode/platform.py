@@ -60,7 +60,33 @@ def handle_pricing_collect(engine, step: dict) -> None:
     engine.stats["vlm_calls"] += pricer.stats.get("vlm_calls", 0)
     engine.stats["vlm_failures"] += pricer.stats.get("vlm_failures", 0)
     engine.stats["api_seconds"] = engine.stats.get("api_seconds", 0.0) + pricer.stats.get("api_seconds", 0.0)
-    engine.stats["wait_seconds"] = engine.stats.get("wait_seconds", 0.0) + pricer.stats.get("wait_seconds", 0.0)
+    engine.add_wait(pricer.stats.get("wait_seconds", 0.0))  # 并入全局等待累加器
+
+
+# ---------------------------------------------------------------------------
+# 平台特有步骤：select_all（目标锚定的幂等全选，SEL-01）
+# ---------------------------------------------------------------------------
+
+def handle_select_all(engine, step: dict) -> None:
+    """执行「全选/全选经济」幂等勾选（YAML 步骤 type: select_all）。"""
+    label = step.get("label", "全选")
+    engine._log(f"── 全选勾选: {label} ──")
+
+    from collector.platform.gaode.select_all import ensure_all_selected
+
+    region = step.get("expected_region") or         engine.profile_cfg.get("collection", {}).get("select_all_region")
+    ensure_all_selected(
+        adb=engine.adb,
+        grounder=engine.grounder,
+        label=label,
+        screen_size=engine._screen_size,
+        expected_region=region,
+        screenshot=lambda name: engine._screenshot(name, save=True),
+        stats=engine.stats,
+        verbose=engine.verbose,
+        wait_after_click=engine.timing.get("after_tap_wait", 2.0),
+    )
+    engine._log(f"  ✓ {label} 已勾选")
 
 
 # ---------------------------------------------------------------------------
@@ -76,5 +102,6 @@ def build_platform() -> Platform:
         default_flow="v1",
         add_cli_args=add_cli_args,
         build_flow_vars=build_flow_vars,
-        step_handlers={"pricing_collect": handle_pricing_collect},
+        step_handlers={"pricing_collect": handle_pricing_collect,
+                        "select_all": handle_select_all},
     )

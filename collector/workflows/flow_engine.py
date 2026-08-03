@@ -121,6 +121,10 @@ class FlowEngine:
             time.sleep(seconds)
             self._wait_total += float(seconds)
 
+    def add_wait(self, seconds: float) -> None:
+        """合并子流程（如平台 handler）产生的等待时长，用于总耗时归因。"""
+        self._wait_total += float(seconds or 0.0)
+
     def _api_seconds(self) -> float:
         """当前累计 API 耗时（对 mock 兼容返回 0.0）。"""
         v = getattr(self.grounder, "api_seconds", None)

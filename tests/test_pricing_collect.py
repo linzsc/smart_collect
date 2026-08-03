@@ -163,7 +163,7 @@ def test_fsm_full_flow():
 
     预期调用链:
       1. S0: slide(上滑)
-      2. S1: ground(全选) → click → ground(double check)
+      2. S1: ensure_all_selected(全选经济) → 幂等勾选 (SEL-01)
       3. S2: query_text(识别供应商) → ["快车", "特惠快车"]
       4. S3a[快车]: ground(点问号, ref=button_to_price.png) → click
       5. S3c[快车]: ground(查看详细计价规则) → click
@@ -190,22 +190,35 @@ def test_fsm_full_flow():
     # Profile config
     profile_cfg = _build_profile_cfg()
 
+    from collector.domain.checkbox import SelectAllTarget
+
     # ── 执行 ──
     fsms = []  # track created FSMs for stats
+    _checked_target = SelectAllTarget(
+        target_found=True, target_label="全选经济",
+        label_bbox=[800, 400, 880, 480],
+        checkbox_bbox=[900, 410, 960, 470],
+        checkbox_center=(930, 440),
+        relation_valid=True, state="checked",
+    )
 
-    with patch('collector.platform.gaode.ride_pricing.AdbTools', return_value=mock_adb):
-        with patch('collector.platform.gaode.ride_pricing.VLMGrounder', return_value=mock_grounder):
-            # Patch the module-level adb/grounder in ride_pricing
-            fsm = RidePricingFSM(
-                adb=mock_adb,
-                grounder=mock_grounder,
-                supplier="经济型",
-                profile_cfg=profile_cfg,
-                output_dir="/tmp/test_output",
-                verbose=False,
-            )
-            results = fsm.run()
-            fsms.append(fsm)
+    with patch('collector.platform.gaode.select_all.ensure_all_selected',
+               return_value=_checked_target) as mock_ensure:
+        with patch('collector.platform.gaode.ride_pricing.AdbTools', return_value=mock_adb):
+            with patch('collector.platform.gaode.ride_pricing.VLMGrounder', return_value=mock_grounder):
+                # Patch the module-level adb/grounder in ride_pricing
+                fsm = RidePricingFSM(
+                    adb=mock_adb,
+                    grounder=mock_grounder,
+                    supplier="经济型",
+                    profile_cfg=profile_cfg,
+                    output_dir="/tmp/test_output",
+                    verbose=False,
+                )
+                results = fsm.run()
+                fsms.append(fsm)
+
+    assert mock_ensure.called, "S1 应调用 ensure_all_selected"
 
     fsm = fsms[0]
 
@@ -221,17 +234,8 @@ def test_fsm_full_flow():
     slide_calls = mock_adb.slide.call_args_list
     assert len(slide_calls) >= 1, f"S0: 应至少 1 次上滑, 实际 {len(slide_calls)}"
 
-    # 3. S1 全选经济: 应调用 ground 至少 2 次 (首轮 + double check)
+    # 3. S1 全选经济: 走 ensure_all_selected（目标锚定，不再整图 ground 判状态）
     ground_calls = mock_grounder.ground.call_args_list
-    assert len(ground_calls) >= 2, f"S1: ground 至少 2 次, 实际 {len(ground_calls)}"
-
-    # 验证 S1 的 ref_images 包含 yes.png 和 false.png
-    s1_call = ground_calls[0]
-    s1_refs = s1_call.kwargs.get("ref_images", [])
-    assert any("yes.png" in (r or "") for r in s1_refs), \
-        f"S1 应使用 yes.png 参考图, 实际 refs={s1_refs}"
-    assert any("false.png" in (r or "") for r in s1_refs), \
-        f"S1 应使用 false.png 参考图, 实际 refs={s1_refs}"
 
     # 4. S2 供应商识别: query_text 应被调用
     query_calls = mock_grounder.query_text.call_args_list
@@ -341,9 +345,9 @@ def _build_ground_side_effect():
     #   6. S3c 返回(2) → 找到
     per_supplier = [FOUND_AT(500, 1800)] * 6
 
-    # S1 第1轮 → 未选中; S1 double check → 已选中
+    # S1 全选经济已改走 ensure_all_selected（SEL-01），不再调用 ground；
     # (S2 用 query_text 不用 ground)
-    sequence = [NOT_SELECTED, SELECTED]
+    sequence = []
     # 2 个供应商
     for _ in range(2):
         sequence.extend(per_supplier)

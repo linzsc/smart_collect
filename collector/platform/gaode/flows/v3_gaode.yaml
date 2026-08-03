@@ -106,15 +106,11 @@ steps:
     description: "等待白底盒子页弹出"
     seconds: 1.5
 
-  # ── S3: 盒子页全选 (double check) ──
+  # ── S3: 盒子页全选（目标锚定的幂等全选 SEL-01）──
   - id: "box_select_all"
-    type: "ground_doublecheck"
-    description: "在盒子页下半部分白底区域勾选全选"
-    ref_images:
-      - "yes.png"
-      - "false.png"
-    ground:
-      element_desc: "当前屏幕下半部分是弹出的白底盒子页，显示多款特快车车型。在盒子页白底区域内找到「全选」勾选控件。勾选控件是'全选'文字右边的圆形勾选框。参考附件图1 yes.png（已勾选蓝底白勾✓）和图2 false.png（未勾选灰色空心圆○）判断状态。\n\n**必须**在Action首行以 EXACT 格式输出: SELECTED=true 或 SELECTED=false\n如果未选中(SELECTED=false)，返回 bbox 和中心坐标。如果已选中(SELECTED=true)，bbox 填 [0,0,0,0]。"
+    type: "select_all"
+    description: "在盒子页白底区域勾选全选"
+    label: "全选"
 
   # ── S4: 盒子页内向下滑动到底 ──
   - id: "box_scroll_to_bottom"
@@ -133,15 +129,11 @@ steps:
       retry_alt_descs:
         - "盒子页下方的确认/确定按钮"
 
-  # ── S6: 打车页全选经济型 (double check) ──
+  # ── S6: 打车页全选经济型（目标锚定的幂等全选 SEL-01）──
   - id: "select_all_economy"
-    type: "ground_doublecheck"
+    type: "select_all"
     description: "在打车页勾选全选经济型"
-    ref_images:
-      - "yes.png"
-      - "false.png"
-    ground:
-      element_desc: "回到打车页面，在截图的下半部分找「经济型」分组标题右边'全选经济'文字右侧的勾选方框控件。参考图1 yes.png 已勾选，图2 false.png 未勾选。\n\n**必须**在Action首行以 EXACT 格式输出: SELECTED=true 或 SELECTED=false\n如果未选中(SELECTED=false)，返回 bbox 和中心坐标。如果已选中(SELECTED=true)，bbox 填 [0,0,0,0]。"
+    label: "全选经济"
 
   # ── S7: 下滑直到「出租车」出现 ──
   - id: "scroll_to_taxi"

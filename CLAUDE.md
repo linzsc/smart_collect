@@ -193,6 +193,8 @@ collector/
 | ARCH-05 | Platform 抽象与注册表（多平台接入） | `DONE` | 新增平台零侵入：`--platform` 选择 + 平台注册表 + 通用步骤 handler；gaode 行为不变；离线测试通过 |
 | ARCH-06 | 截图与标记输出模式（debug/collect） | `DONE` | 标记图仅 debug 输出；collect 模式仅保存详细计价页截图；离线测试通过 |
 | ARCH-07 | collect 模式采集打车页 + 耗时统计 | `DONE` | collect 保存打车页(含滑动)与详细计价页；输出每步/API/等待耗时；离线测试通过 |
+| SEL-01 | 目标锚定的幂等全选 ensure_all_selected | `DONE` | 定位/判定拆分，仅判主勾选框ROI；素材100次成功率100%(700/700)；点击后重验；真机验证通过 |
+| PERF-01 | 耗时优化（P2） | `TODO` | 减少截图/标注/固定等待与VLM调用开销；collect 模式耗时归因准确 |
 
 计划维护规则：
 
@@ -208,6 +210,7 @@ collector/
 ```bash
 python tests/test_double_check.py
 python tests/test_pricing_collect.py
+python tests/test_select_all.py
 python -m compileall collector tests
 ```
 
@@ -244,6 +247,9 @@ python -m compileall collector tests
 | 2026-08-03 | ARCH-05 | `DONE` | Platform 抽象与注册表：domain/platform.py + platform/registry.py + gaode/platform.py；flow_engine 去掉对高德直接依赖，pricing_collect 改为平台 handler；cli 增加 --platform | compileall + test_double_check + test_pricing_collect（含 Suite 3b 注册表/零侵入）通过 |
 | 2026-08-04 | ARCH-06 | `DONE` | 截图/标记输出模式：--mode debug|collect；标记图仅 debug；collect 仅保存详细计价页截图，其余走临时目录供 VLM 定位 | compileall + test_double_check + test_pricing_collect（含 Suite 3c 模式测试）通过 |
 | 2026-08-04 | ARCH-07 | `DONE` | collect 模式改为进入打车页后开始保存（含刚进打车页/滑动/详细计价页）；新增耗时统计（每步/API/等待） | compileall + test_double_check + test_pricing_collect（Suite 3c 含耗时统计）通过 |
+| 2026-08-04 | SEL-01 | `DONE` | ensure_all_selected 目标锚定幂等全选：domain/checkbox + infra/vision/checkbox + gaode/select_all(含离线定位启发式) + select_all 平台步骤(v3) + 删 NL 兜底；素材100次成功率700/700 | compileall + test_double_check + test_pricing_collect + test_select_all 通过 |
+| 2026-08-04 | RUN-01 | `DONE` | 真机 v2 debug 全流程跑通（起终点→计价采集2家）；S1 全选经济目标锚定：未勾选→点击→已勾选；耗时 250.4s（API 58.3s/等待52.2s） | 真机日志（run_real_test.txt） |
+| 2026-08-04 | PERF-01 | `TODO` | 耗时优化 P2：debug 模式非准确耗时；API/等待/设备+编码三块归因，待优化 | 250.4s 真机日志归因 |
 
 ## 9. AI交付格式
 

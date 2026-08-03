@@ -334,6 +334,35 @@ class VLMGrounder:
         raw_text, success = self._call_api(messages)
         return {"raw_response": raw_text or "", "success": success}
 
+    def query_structured(
+        self,
+        image_path: str,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> dict[str, Any]:
+        """发送 图片+严格指令，只返回原始文本（不做任何自然语言解析）。
+
+        供上层（如全选勾选框定位）严格解析 JSON；结构化缺失时由上层判 UNKNOWN。
+        """
+        image_data_url = image_to_base64(
+            image_path, max_pixels=self.image_max_pixels,
+        )
+        messages = [
+            {
+                "role": "system",
+                "content": [{"type": "text", "text": system_prompt}],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_prompt},
+                    {"type": "image_url", "image_url": {"url": image_data_url}},
+                ],
+            },
+        ]
+        raw_text, success = self._call_api(messages)
+        return {"raw_response": raw_text or "", "success": success}
+
     def ground_with_context(
         self,
         image_path: str,
@@ -478,28 +507,12 @@ class VLMGrounder:
             default["reason"] = "Empty VLM response"
             return default
 
-        # Extract SELECTED= from raw text (always, even on API failure)
-        # Primary: explicit "SELECTED=true/false" marker
-        # Fallback: NLP pattern matching for VLM's natural language judgment
+        # 只接受显式 SELECTED=true/false 标记；不再做自然语言兜底（SEL-01）。
+        # 结构化结果缺失时 selected 保持 None（上层应判 UNKNOWN）。
         selected: bool | None = None
         sel_match = re.search(r'SELECTED\s*=\s*(true|false)', raw_text, re.IGNORECASE)
         if sel_match:
             selected = sel_match.group(1).lower() == "true"
-        else:
-            # Natural language fallback — VLM often says "已勾选"/"未勾选" etc.
-            raw_lower = raw_text.lower()
-            # Positive patterns (already selected)
-            if any(p in raw_lower for p in [
-                '已勾选', '已选中', '蓝底白勾', '当前为已勾',
-                'already selected', 'already checked',
-            ]):
-                selected = True
-            # Negative patterns (not yet selected)
-            elif any(p in raw_lower for p in [
-                '未勾选', '未选中', '灰色空心圆', '当前为未勾',
-                'not selected', 'not checked', 'unselected',
-            ]):
-                selected = False
         default["selected"] = selected
 
         if not api_success:
