@@ -22,13 +22,13 @@ brew install android-platform-tools  # macOS
 # 连接手机，USB 调试已开启
 adb devices
 
-# 运行（以 v2 为例）
+# 运行（以 gaode v2 为例）
 .venv/bin/python -m collector.demo \
+    --platform gaode --flow v2 \
     --address "西北旺万象汇" --pickup "北京西站" \
     --adb-path $(which adb) \
     --vlm-api-key "sk-..." \
-    --vlm-base-url "https://..." \
-    --flow v2
+    --vlm-base-url "https://..."
 ```
 
 每次运行前自动清空 `output/`，结果保存在 `output/`（截图）和 `output/_annotations/`（标注）。
@@ -56,16 +56,39 @@ v2 / v3 需要 `--pickup`，v1 从当前位置出发。
 ```
 assets/                # 素材（参考图）
 collector/
-  demo.py              # 入口
-  flow_engine.py       # YAML 流程引擎
-  vlm_grounder.py      # VLM 视觉定位
-  ride_pricing.py      # 计价采集 FSM
-  adb_utils.py         # ADB 封装
-  flows/               # YAML 流程配置
-  profiles/            # 平台配置
+  cli/                 # 参数解析和依赖组装（入口 demo.py）
+  workflows/           # 正常确定性流程（YAML 流程引擎）
+  platform/gaode/      # 高德页面、Prompt、Flow、Profile
+    flows/             # YAML 流程配置
+    profiles/          # 平台配置
+  infrastructure/
+    device/            # ADB 设备控制
+    vision/            # VLM 视觉定位
+  domain/              # 数据模型、接口、错误（不依赖 SDK）
+  quality/             # 状态验证、Ground Truth、Diff
 tests/
 output/                # 运行时输出（截图 + 标注）
 ```
+
+> 结构按 `codex.md` 目标布局重构；旧导入路径（如 `collector.adb_utils`、
+> `collector.ride_pricing`）保留兼容层，新代码请使用 canonical 路径。
+> 入口：`python -m collector.demo`（兼容）或 `python -m collector.cli.demo`。
+> 平台由 `collector/platform/registry.py` 注册，见下方「多平台接入」。
+
+## 多平台接入
+
+平台注册表（`collector/platform/registry.py`）驱动 `--platform` 选择。接入新平台：
+
+1. 新建 `collector/platform/<name>/`：`flows/`（YAML 流程）、`profiles/<name>.json`（Profile）。
+2. 在 `collector/platform/<name>/platform.py` 实现 `build_platform()`：
+   - `flows_dir` / `profile_path` / `default_flow`
+   - 平台特有 CLI 参数（`add_cli_args`，如 gaode 的 `--address`/`--pickup`）
+   - 模板变量（`build_flow_vars`）
+   - 平台特有步骤（`step_handlers`，如 gaode 的 `pricing_collect`）
+3. 在 `collector/platform/registry.py` 的 `_register_builtins()` 加一行注册。
+
+通用代码（`cli`、`workflows/flow_engine`、`infrastructure`）无需改动。
+示例：`tests/test_pricing_collect.py` 的 `test_fake_platform_zero_intrusion`。
 
 ## 测试
 

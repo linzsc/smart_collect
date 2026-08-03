@@ -48,7 +48,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 def test_s2_parse_json_array():
     """S2: VLM 返回标准 JSON 数组"""
     raw = '```json\n["快车", "特惠快车", "优酷快车"]\n```'
-    from collector.ride_pricing import RidePricingFSM
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
 
     # 模拟 _s2_list_suppliers 的解析逻辑
     cleaned = raw
@@ -67,7 +67,7 @@ def test_s2_parse_json_array():
 def test_s2_parse_excludes_taxi_and_youxiang():
     """S2: 排除「出租车」和「优享」"""
     raw = '["快车", "出租车", "特惠快车", "优享", "拼车"]'
-    from collector.ride_pricing import _SKIP_SUPPLIERS
+    from collector.platform.gaode.ride_pricing import _SKIP_SUPPLIERS
 
     cleaned = raw.strip()
     parsed = json.loads(cleaned)
@@ -87,7 +87,7 @@ def test_s2_parse_line_by_line_fallback():
 3. 优选快车"""
 
     import re
-    from collector.ride_pricing import _SKIP_SUPPLIERS
+    from collector.platform.gaode.ride_pricing import _SKIP_SUPPLIERS
 
     suppliers = []
     for line in raw.split("\n"):
@@ -111,7 +111,7 @@ def test_s2_parse_empty():
 
 def test_extract_center_from_bbox_and_center():
     """_extract_center: 同时有 bbox 和 center"""
-    from collector.ride_pricing import RidePricingFSM
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
 
     # 需要实例才能调用 _extract_center, 但它不是 static
     # 我们直接用同样逻辑
@@ -173,7 +173,7 @@ def test_fsm_full_flow():
       6. S3a[特惠快车]: 同上
       7. S3c[特惠快车]: 同上
     """
-    from collector.ride_pricing import RidePricingFSM
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
 
     # ── 构建 Mock ──
     mock_adb = MagicMock()
@@ -193,8 +193,8 @@ def test_fsm_full_flow():
     # ── 执行 ──
     fsms = []  # track created FSMs for stats
 
-    with patch('collector.ride_pricing.AdbTools', return_value=mock_adb):
-        with patch('collector.ride_pricing.VLMGrounder', return_value=mock_grounder):
+    with patch('collector.platform.gaode.ride_pricing.AdbTools', return_value=mock_adb):
+        with patch('collector.platform.gaode.ride_pricing.VLMGrounder', return_value=mock_grounder):
             # Patch the module-level adb/grounder in ride_pricing
             fsm = RidePricingFSM(
                 adb=mock_adb,
@@ -410,8 +410,9 @@ def _build_query_text_side_effect():
 # ======================================================================
 
 def test_flow_engine_pricing_collect_step():
-    """验证 FlowEngine 正确委托 pricing_collect 步骤给 RidePricingFSM."""
-    from collector.flow_engine import FlowEngine
+    """验证 FlowEngine 通过平台 step_handlers 委托 pricing_collect 给 RidePricingFSM."""
+    from collector.platform.gaode.platform import handle_pricing_collect
+    from collector.workflows.flow_engine import FlowEngine
 
     mock_adb = MagicMock()
     type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
@@ -434,8 +435,8 @@ steps:
         tmp_path = f.name
 
     try:
-        # 用 patch 替换 RidePricingFSM
-        with patch('collector.flow_engine.RidePricingFSM') as MockFSM:
+        # 平台 handler 在调用时从 gaode.ride_pricing import RidePricingFSM，在此 patch
+        with patch('collector.platform.gaode.ride_pricing.RidePricingFSM') as MockFSM:
             mock_fsm_instance = MagicMock()
             mock_fsm_instance.stats = {"vlm_calls": 5, "vlm_failures": 0}
             MockFSM.return_value = mock_fsm_instance
@@ -447,6 +448,7 @@ steps:
                 output_dir="/tmp/test_engine",
                 verbose=False,
                 profile_cfg={"collection": {"max_suppliers": 2}},
+                platform_step_handlers={"pricing_collect": handle_pricing_collect},
             )
             engine.run()
 
@@ -458,9 +460,86 @@ steps:
             assert engine.stats["vlm_calls"] == 5, \
                 f"stats 应合并, 预期 5, 实际 {engine.stats['vlm_calls']}"
 
-            print(f"  [FlowEngine] ✓ pricing_collect 步骤正确委托")
+            print(f"  [FlowEngine] ✓ pricing_collect 通过平台 handler 正确委托")
     finally:
         Path(tmp_path).unlink()
+
+
+# ======================================================================
+# Suite 3b: 平台注册表 / 新平台零侵入
+# ======================================================================
+
+def test_platform_registry():
+    """注册表：gaode 可解析、flow 约定、未知平台报错."""
+    from collector.platform.registry import available_platforms, get_platform
+
+    assert "gaode" in available_platforms(), "注册表应包含 gaode"
+
+    gaode = get_platform("gaode")
+    assert gaode.flows_dir.name == "flows"
+    assert gaode.profile_path.name == "gaode.json"
+    assert gaode.default_flow == "v1"
+    assert "pricing_collect" in gaode.step_handlers, "gaode 应注册 pricing_collect"
+    assert gaode.resolve_flow("v2").name == "v2_gaode.yaml", "flow 解析约定 <flow>_<platform>.yaml"
+    assert "v1" in gaode.list_flow_names(), "list_flow_names 应列出 v1/v2/v3"
+
+    try:
+        get_platform("not_a_platform")
+        raise AssertionError("未注册平台应抛 KeyError")
+    except KeyError:
+        pass
+    return "PASS ✓"
+
+
+def test_fake_platform_zero_intrusion():
+    """新平台零侵入：注册一个假平台 + 自定义步骤，不改通用代码即可执行."""
+    import shutil
+    import tempfile
+
+    from collector.domain.platform import Platform
+    from collector.platform.registry import available_platforms, register_platform, unregister_platform
+    from collector.workflows.flow_engine import FlowEngine
+
+    tmp_dir = tempfile.mkdtemp(prefix="fake_platform_")
+    try:
+        flow_path = Path(tmp_dir) / "v1_fake.yaml"
+        flow_path.write_text(
+            'name: "fake"\nversion: "1"\nsteps:\n'
+            '  - id: "custom"\n    type: "fake_custom_step"\n'
+            '    description: "自定义步骤"\n',
+            encoding="utf-8",
+        )
+        called = {"n": 0}
+
+        def handle_custom(engine, step):
+            called["n"] += 1
+            assert step.get("type") == "fake_custom_step"
+
+        fake_platform = Platform(
+            name="fake",
+            flows_dir=Path(tmp_dir),
+            profile_path=Path(tmp_dir) / "fake.json",
+            default_flow="v1",
+            step_handlers={"fake_custom_step": handle_custom},
+        )
+        register_platform(fake_platform)
+
+        engine = FlowEngine(
+            adb=MagicMock(),
+            grounder=MagicMock(),
+            flow_path=str(flow_path),
+            output_dir=tmp_dir,
+            verbose=False,
+            platform_step_handlers=fake_platform.step_handlers,
+        )
+        engine.run()
+
+        assert called["n"] == 1, "自定义平台步骤应被执行一次"
+        assert "fake" in available_platforms(), "假平台应已注册"
+        return "PASS ✓"
+    finally:
+        unregister_platform("fake")
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     return True
 
@@ -477,7 +556,7 @@ def real_vlm_tests(api_key: str, base_url: str) -> None:
       2. 计价页 → 定位「查看详细计价规则」
       3. 详细计价页 → 定位「工作日」和「休息日」tab
     """
-    from collector.vlm_grounder import VLMGrounder
+    from collector.infrastructure.vision.vlm_grounder import VLMGrounder
 
     grounder = VLMGrounder(
         api_key=api_key, base_url=base_url,
@@ -590,9 +669,9 @@ def real_device_test(
 
     前置条件: 设备已解锁, 高德地图处于打车页 (已输入起终点).
     """
-    from collector.adb_utils import AdbTools
-    from collector.ride_pricing import RidePricingFSM
-    from collector.vlm_grounder import VLMGrounder
+    from collector.infrastructure.device.adb_utils import AdbTools
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+    from collector.infrastructure.vision.vlm_grounder import VLMGrounder
 
     print("\n" + "=" * 60)
     print("  Real Device — 完整子流程")
@@ -706,6 +785,21 @@ def main() -> None:
         import traceback
         traceback.print_exc()
         all_pass = False
+
+    # ── Suite 3b: 平台注册表 / 零侵入 ──
+    print("\n── Suite 3b: 平台注册表 / 新平台零侵入 ──")
+    for label, fn in [
+        ("平台注册表", test_platform_registry),
+        ("假平台零侵入", test_fake_platform_zero_intrusion),
+    ]:
+        try:
+            s = fn()
+            print(f"  [{s}] {label}")
+        except Exception as e:
+            print(f"  [FAIL ✗] {label}: {e}")
+            import traceback
+            traceback.print_exc()
+            all_pass = False
 
     # ── Suite 4: 真实 VLM (可选) ──
     if args.real_vlm:

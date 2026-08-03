@@ -51,7 +51,7 @@ SELECTED=true
 <tool_call>{"name": "mobile_use", "arguments": {"action": "answer", "bbox": [0, 0, 0, 0]}}</tool_call>"""
 
 # ── Import 被测代码 ──
-from collector.vlm_grounder import VLMGrounder
+from collector.infrastructure.vision.vlm_grounder import VLMGrounder
 
 
 # ======================================================================
@@ -137,7 +137,7 @@ def test_coordinate_zero_zero_rejected():
 
 def test_doublecheck_decision_logic():
     """模拟 _do_ground_doublecheck 的决策逻辑"""
-    from collector.vlm_grounder import VLMGrounder
+    from collector.infrastructure.vision.vlm_grounder import VLMGrounder
 
     results = []
 
@@ -175,7 +175,7 @@ def test_doublecheck_decision_logic():
 
 def real_vlm_tests(api_key: str, base_url: str) -> None:
     """用 3 张真实素材图 + yes/false 参考图测试 VLM."""
-    from collector.vlm_grounder import VLMGrounder
+    from collector.infrastructure.vision.vlm_grounder import VLMGrounder
 
     grounder = VLMGrounder(
         api_key=api_key, base_url=base_url,
