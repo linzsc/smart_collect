@@ -53,6 +53,8 @@ def handle_pricing_collect(engine, step: dict) -> None:
         profile_cfg=engine.profile_cfg,
         output_dir=str(engine.output_dir),
         verbose=engine.verbose,
+        mode=engine.mode,
+        scratch_dir=str(engine.scratch_dir) if engine.scratch_dir else None,
     )
     pricer.run()
     # 合并 VLM 统计

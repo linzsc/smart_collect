@@ -191,6 +191,7 @@ collector/
 | INF-01 | Go设备层必要性评估 | `TODO` | 根据长期运行和多机数据决定，不预先重写 |
 | REF-01 | 按 codex.md 目标结构重构代码目录 | `DONE` | 现有模块迁移到 cli/workflows/platform/infrastructure/domain/quality；旧导入路径兼容；离线测试通过 |
 | ARCH-05 | Platform 抽象与注册表（多平台接入） | `DONE` | 新增平台零侵入：`--platform` 选择 + 平台注册表 + 通用步骤 handler；gaode 行为不变；离线测试通过 |
+| ARCH-06 | 截图与标记输出模式（debug/collect） | `DONE` | 标记图仅 debug 输出；collect 模式仅保存详细计价页截图；离线测试通过 |
 
 计划维护规则：
 
@@ -240,6 +241,7 @@ python -m compileall collector tests
 | 2026-08-03 | REF-01 | `DONE` | 按 codex.md 目标结构重构：cli/workflows/platform/gaode/infrastructure{device,vision}/domain/quality；旧导入路径保留兼容层；flows/profiles 移入 platform/gaode | compileall + test_double_check + test_pricing_collect 通过；旧路径 smoke 通过 |
 | 2026-08-03 | DOC-02 | `DONE` | codex.md/CLAUDE.md 第3节改为一次性重构已完成；明确当前有代码目录与预留目录；依赖规则改为 canonical 优先 | 文档检查 |
 | 2026-08-03 | ARCH-05 | `DONE` | Platform 抽象与注册表：domain/platform.py + platform/registry.py + gaode/platform.py；flow_engine 去掉对高德直接依赖，pricing_collect 改为平台 handler；cli 增加 --platform | compileall + test_double_check + test_pricing_collect（含 Suite 3b 注册表/零侵入）通过 |
+| 2026-08-04 | ARCH-06 | `DONE` | 截图/标记输出模式：--mode debug|collect；标记图仅 debug；collect 仅保存详细计价页截图，其余走临时目录供 VLM 定位 | compileall + test_double_check + test_pricing_collect（含 Suite 3c 模式测试）通过 |
 
 ## 9. AI交付格式
 

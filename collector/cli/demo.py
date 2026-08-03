@@ -90,6 +90,8 @@ def main() -> None:
                         help="静默模式")
     parser.add_argument("--image-max-pixels", type=int, default=400000,
                         help="截图最大像素数 (默认: 400000)")
+    parser.add_argument("--mode", default="debug", choices=["debug", "collect"],
+                        help="debug: 每步截图+标记图；collect: 仅保存详细计价页截图 (默认: debug)")
 
     # ── 预扫描 --platform，注册平台自己的参数（如 gaode 的 --address/--pickup），
     #    保证 `--help` 也能完整展示平台参数 ──
@@ -149,6 +151,7 @@ def main() -> None:
         verbose=not args.quiet,
         profile_cfg=profile_cfg,
         platform_step_handlers=platform.step_handlers,
+        mode=args.mode,
     )
 
     t_start = time.time()
@@ -162,6 +165,8 @@ def main() -> None:
         import traceback
         traceback.print_exc()
         sys.exit(1)
+    finally:
+        engine.cleanup()  # 删除 collect 模式的临时截图目录
 
     elapsed = time.time() - t_start
     print(f"\n[Flow] 耗时: {elapsed:.1f}s")

@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import tempfile
 import time
 from pathlib import Path
 from string import Template
@@ -59,6 +61,7 @@ class FlowEngine:
         verbose: bool = True,
         profile_cfg: dict[str, Any] | None = None,
         platform_step_handlers: dict[str, Any] | None = None,
+        mode: str = "debug",
     ):
         self.adb = adb
         self.grounder = grounder
@@ -70,6 +73,9 @@ class FlowEngine:
         # 平台特有步骤（如 pricing_collect）由 Platform.step_handlers 注入，
         # 通用引擎不直接依赖任何平台模块。
         self._platform_step_handlers = platform_step_handlers or {}
+        # 输出模式: debug(每步截图+标记图) / collect(仅保存详细计价页截图)
+        self.mode = mode if mode in ("debug", "collect") else "debug"
+        self._scratch_dir: Path | None = None
 
         with open(flow_path, "r", encoding="utf-8") as f:
             self.flow = self._deep_resolve(self.vars, f.read())
@@ -78,6 +84,30 @@ class FlowEngine:
         self.package = self.flow.get("package", "")
         self._shot_seq = 0
         self.stats = {"vlm_calls": 0, "vlm_failures": 0, "steps_executed": 0}
+
+    # ------------------------------------------------------------------
+    # 输出模式
+    # ------------------------------------------------------------------
+
+    @property
+    def debug_mode(self) -> bool:
+        """debug 模式：每步截图 + 标记图。"""
+        return self.mode == "debug"
+
+    @property
+    def scratch_dir(self) -> Path | None:
+        """collect 模式下的临时截图目录（供 VLM 定位，不计入最终输出）。"""
+        if self.debug_mode:
+            return None
+        if self._scratch_dir is None:
+            self._scratch_dir = Path(tempfile.mkdtemp(prefix="collector_scratch_"))
+        return self._scratch_dir
+
+    def cleanup(self) -> None:
+        """删除 collect 模式的临时截图目录。"""
+        if self._scratch_dir is not None:
+            shutil.rmtree(self._scratch_dir, ignore_errors=True)
+            self._scratch_dir = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -495,9 +525,13 @@ class FlowEngine:
             return sz
         raise RuntimeError("无法获取屏幕尺寸")
 
-    def _screenshot(self, name: str) -> str:
+    def _screenshot(self, name: str, save: bool | None = None) -> str:
+        """截图。save=None: debug 模式保存到 output，collect 模式存临时目录。"""
         self._shot_seq += 1
-        path = str(self.output_dir / f"{self._shot_seq:02d}_{name}.jpg")
+        if save is None:
+            save = self.debug_mode
+        target = self.output_dir if save else (self.scratch_dir or self.output_dir)
+        path = str(target / f"{self._shot_seq:02d}_{name}.jpg")
         for attempt in range(3):
             if self.adb.get_screenshot(path):
                 return path
@@ -506,6 +540,8 @@ class FlowEngine:
         raise StepFailed(f"截图失败: {name}")
 
     def _annotate(self, image_path, step, bbox, cx, cy, attempt=0):
+        if not self.debug_mode:
+            return  # 标记图仅 debug 模式输出
         anno_dir = self.output_dir / "_annotations"
         anno_dir.mkdir(parents=True, exist_ok=True)
         stem = Path(image_path).stem

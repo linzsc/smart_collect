@@ -90,6 +90,19 @@ output/                # 运行时输出（截图 + 标注）
 通用代码（`cli`、`workflows/flow_engine`、`infrastructure`）无需改动。
 示例：`tests/test_pricing_collect.py` 的 `test_fake_platform_zero_intrusion`。
 
+## 运行模式
+
+`--mode` 控制截图输出：
+
+| 模式 | 截图 | 标记图 |
+|---|---|---|
+| `debug`（默认） | 每一步都保存 | 输出 |
+| `collect` | 仅进入详细计价页后保存（之前截图仅临时用于 VLM 定位，不计入 output） | 不输出 |
+
+```bash
+.venv/bin/python -m collector.demo ... --mode collect
+```
+
 ## 测试
 
 ```bash

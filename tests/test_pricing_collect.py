@@ -541,6 +541,113 @@ def test_fake_platform_zero_intrusion():
         unregister_platform("fake")
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
+
+# ======================================================================
+# Suite 3c: debug/collect 输出模式
+# ======================================================================
+
+def test_collect_mode_engine_no_output():
+    """collect 模式：导航阶段截图写入临时目录，output 无截图、无标记图."""
+    import tempfile
+
+    from collector.infrastructure.device.adb_utils import MockAdbTools
+    from collector.workflows.flow_engine import FlowEngine
+
+    mock_adb = MockAdbTools()  # 真实写占位图，便于断言落盘位置
+    mock_grounder = MagicMock()
+    mock_grounder.ground.return_value = {
+        "element": "x", "bbox": None, "center": None, "conf": 0.0,
+        "found": False, "selected": None, "reason": "mock", "raw_response": "",
+    }
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp) / "out"
+        flow = Path(tmp) / "flow.yaml"
+        flow.write_text(
+            'name: "t"\nversion: "1"\nsteps:\n'
+            '  - id: "s1"\n    type: "ground_click"\n    description: "x"\n'
+            '    ground:\n      element_desc: "x"\n',
+            encoding="utf-8",
+        )
+        engine = FlowEngine(
+            adb=mock_adb, grounder=mock_grounder, flow_path=str(flow),
+            output_dir=str(out_dir), verbose=False, mode="collect",
+        )
+        try:
+            engine.run()
+            assert list(out_dir.glob("*.jpg")) == [], "collect 模式导航阶段不应保存截图"
+            assert not (out_dir / "_annotations").exists(), "collect 模式不应输出标记图"
+            assert engine.scratch_dir is not None
+            assert len(list(engine.scratch_dir.glob("*.jpg"))) >= 1, "VLM 临时截图应写入临时目录"
+        finally:
+            engine.cleanup()
+    return "PASS ✓"
+
+
+def test_collect_mode_pricing_save_routing():
+    """collect 模式：进入详细计价页前截图入临时目录，进入后入 output."""
+    import tempfile
+
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    mock_adb = MagicMock()  # get_screenshot 返回真值即可
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp) / "out"
+        scratch = Path(tmp) / "scratch"
+        fsm = RidePricingFSM(
+            adb=mock_adb, grounder=MagicMock(), supplier="经济型",
+            profile_cfg={}, output_dir=str(out_dir),
+            mode="collect", scratch_dir=str(scratch),
+        )
+        p1 = fsm._save("p01_s0_before")
+        assert Path(p1).parent == scratch, "进入详细计价页前应写入临时目录"
+
+        fsm._capture_active = True
+        p2 = fsm._save("p10_detail_page")
+        assert Path(p2).parent == out_dir, "进入详细计价页后应写入 output"
+
+        # debug 默认：全部写入 output
+        fsm2 = RidePricingFSM(
+            adb=mock_adb, grounder=MagicMock(), supplier="经济型",
+            profile_cfg={}, output_dir=str(out_dir / "dbg"),
+        )
+        p3 = fsm2._save("p01_x")
+        assert Path(p3).parent == (out_dir / "dbg")
+    return "PASS ✓"
+
+
+def test_annotation_gated_by_mode():
+    """标记图仅 debug 模式输出."""
+    import tempfile
+
+    from PIL import Image
+
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    with tempfile.TemporaryDirectory() as tmp:
+        img_path = Path(tmp) / "src.png"
+        Image.new("RGB", (20, 20), "white").save(img_path)
+
+        # collect：不输出标记图
+        out1 = Path(tmp) / "out_collect"
+        fsm1 = RidePricingFSM(
+            adb=MagicMock(), grounder=MagicMock(), supplier="x",
+            profile_cfg={}, output_dir=str(out1), mode="collect",
+            scratch_dir=str(Path(tmp) / "scratch"),
+        )
+        fsm1._do_annotate(str(img_path), "tag1", lambda d: None)
+        assert not (out1 / "_annotations" / "tag1.png").exists(), "collect 模式不应输出标记图"
+
+        # debug：输出标记图
+        out2 = Path(tmp) / "out_debug"
+        fsm2 = RidePricingFSM(
+            adb=MagicMock(), grounder=MagicMock(), supplier="x",
+            profile_cfg={}, output_dir=str(out2),
+        )
+        fsm2._do_annotate(str(img_path), "tag2", lambda d: None)
+        assert (out2 / "_annotations" / "tag2.png").exists(), "debug 模式应输出标记图"
+    return "PASS ✓"
+
     return True
 
 
@@ -791,6 +898,22 @@ def main() -> None:
     for label, fn in [
         ("平台注册表", test_platform_registry),
         ("假平台零侵入", test_fake_platform_zero_intrusion),
+    ]:
+        try:
+            s = fn()
+            print(f"  [{s}] {label}")
+        except Exception as e:
+            print(f"  [FAIL ✗] {label}: {e}")
+            import traceback
+            traceback.print_exc()
+            all_pass = False
+
+    # ── Suite 3c: debug/collect 输出模式 ──
+    print("\n── Suite 3c: debug/collect 输出模式 ──")
+    for label, fn in [
+        ("collect 引擎零输出", test_collect_mode_engine_no_output),
+        ("collect 计价保存路由", test_collect_mode_pricing_save_routing),
+        ("标记图 debug 门控", test_annotation_gated_by_mode),
     ]:
         try:
             s = fn()

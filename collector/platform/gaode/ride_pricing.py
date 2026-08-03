@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,8 @@ class RidePricingFSM:
         profile_cfg: dict[str, Any],
         output_dir: str | None = None,
         verbose: bool = True,
+        mode: str = "debug",
+        scratch_dir: str | None = None,
     ):
         self.adb = adb
         self.grounder = grounder
@@ -48,12 +51,25 @@ class RidePricingFSM:
         self.verbose = verbose
         self.output_dir = Path(output_dir or "./output")
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        # 输出模式: debug(每步截图+标记图) / collect(仅保存详细计价页截图)
+        self.mode = mode if mode in ("debug", "collect") else "debug"
+        self._capture_active = False  # 进入详细计价页后置 True，才开始保存截图
+        if scratch_dir:
+            self.scratch_dir = Path(scratch_dir)
+        elif self.debug_mode:
+            self.scratch_dir = None
+        else:
+            self.scratch_dir = Path(tempfile.mkdtemp(prefix="collector_scratch_"))
         self.steps_cfg = profile_cfg.get("steps", {})
         self.timing = profile_cfg.get("timing", {})
         self.collection_cfg = profile_cfg.get("collection", {})
         self._top_seq = 0       # p01, p02, ...
         self._sub_seq = 0       # _01, _02, ... (reset per sub-step)
         self.stats = {"vlm_calls": 0, "vlm_failures": 0}
+
+    @property
+    def debug_mode(self) -> bool:
+        return self.mode == "debug"
 
     # ==================================================================
     # Screenshot helpers with nested numbering
@@ -69,7 +85,9 @@ class RidePricingFSM:
         return self._save(f"p{self._top_seq:02d}_{self._sub_seq:02d}_{name}")
 
     def _save(self, stem: str) -> str:
-        path = str(self.output_dir / f"{stem}.jpg")
+        """保存截图。collect 模式：未进入详细计价页(_capture_active=False)时写临时目录。"""
+        target = self.output_dir if (self.debug_mode or self._capture_active) else (self.scratch_dir or self.output_dir)
+        path = str(target / f"{stem}.jpg")
         self._ensure_screenshot(path)
         return path
 
@@ -326,6 +344,8 @@ class RidePricingFSM:
             self._log("    ⚠ 未找到详细计价规则入口")
             return False
 
+        # 已进入详细计价页 → collect 模式从这里开始保存截图
+        self._capture_active = True
         self._shot(f"detail_page_{supplier}")
 
         # ── 子步骤编号器 ──
@@ -344,6 +364,7 @@ class RidePricingFSM:
         self._tap_back_arrow(f"detail_exit_to_popup_{supplier}")
         self._log("      返回 → 打车页")
         self._tap_back_arrow(f"detail_exit_to_ride_{supplier}")
+        self._capture_active = False  # 已回到打车页，停止保存
         return True
 
     def _tap_tab_and_scroll(self, tab_label: str, supplier: str) -> None:
@@ -477,6 +498,8 @@ class RidePricingFSM:
         self._do_annotate(image_path, self._tag(image_path, tag), _draw)
 
     def _do_annotate(self, image_path: str, tag: str, fn) -> None:
+        if not self.debug_mode:
+            return  # 标记图仅 debug 模式输出
         anno_dir = self.output_dir / "_annotations"
         anno_dir.mkdir(parents=True, exist_ok=True)
         try:
