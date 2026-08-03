@@ -584,8 +584,8 @@ def test_collect_mode_engine_no_output():
     return "PASS ✓"
 
 
-def test_collect_mode_pricing_save_routing():
-    """collect 模式：进入详细计价页前截图入临时目录，进入后入 output."""
+def test_collect_mode_pricing_saves_ride_page():
+    """collect 模式：打车页(刚进入/滑动)与详细计价页截图都保存到 output."""
     import tempfile
 
     from collector.platform.gaode.ride_pricing import RidePricingFSM
@@ -593,26 +593,24 @@ def test_collect_mode_pricing_save_routing():
     mock_adb = MagicMock()  # get_screenshot 返回真值即可
     with tempfile.TemporaryDirectory() as tmp:
         out_dir = Path(tmp) / "out"
-        scratch = Path(tmp) / "scratch"
         fsm = RidePricingFSM(
             adb=mock_adb, grounder=MagicMock(), supplier="经济型",
-            profile_cfg={}, output_dir=str(out_dir),
-            mode="collect", scratch_dir=str(scratch),
+            profile_cfg={}, output_dir=str(out_dir), mode="collect",
         )
-        p1 = fsm._save("p01_s0_before")
-        assert Path(p1).parent == scratch, "进入详细计价页前应写入临时目录"
+        p1 = fsm._save("p01_ride_page_entry")   # 刚进打车页
+        assert Path(p1).parent == out_dir, "collect 模式刚进打车页截图应保存到 output"
+        p2 = fsm._save("p02_s4_next")           # 打车页滑动
+        assert Path(p2).parent == out_dir, "collect 模式打车页滑动截图应保存到 output"
+        p3 = fsm._save("p03_detail_page")       # 详细计价页
+        assert Path(p3).parent == out_dir, "collect 模式详细计价页截图应保存到 output"
 
-        fsm._capture_active = True
-        p2 = fsm._save("p10_detail_page")
-        assert Path(p2).parent == out_dir, "进入详细计价页后应写入 output"
-
-        # debug 默认：全部写入 output
+        # debug 默认：同样全部写入 output
         fsm2 = RidePricingFSM(
             adb=mock_adb, grounder=MagicMock(), supplier="经济型",
             profile_cfg={}, output_dir=str(out_dir / "dbg"),
         )
-        p3 = fsm2._save("p01_x")
-        assert Path(p3).parent == (out_dir / "dbg")
+        p4 = fsm2._save("p01_x")
+        assert Path(p4).parent == (out_dir / "dbg")
     return "PASS ✓"
 
 
@@ -633,7 +631,6 @@ def test_annotation_gated_by_mode():
         fsm1 = RidePricingFSM(
             adb=MagicMock(), grounder=MagicMock(), supplier="x",
             profile_cfg={}, output_dir=str(out1), mode="collect",
-            scratch_dir=str(Path(tmp) / "scratch"),
         )
         fsm1._do_annotate(str(img_path), "tag1", lambda d: None)
         assert not (out1 / "_annotations" / "tag1.png").exists(), "collect 模式不应输出标记图"
@@ -646,6 +643,38 @@ def test_annotation_gated_by_mode():
         )
         fsm2._do_annotate(str(img_path), "tag2", lambda d: None)
         assert (out2 / "_annotations" / "tag2.png").exists(), "debug 模式应输出标记图"
+    return "PASS ✓"
+
+
+def test_timing_stats_recorded():
+    """耗时统计：等待/API/总耗时被记录并汇总."""
+    import tempfile
+
+    from collector.infrastructure.device.adb_utils import MockAdbTools
+    from collector.workflows.flow_engine import FlowEngine
+
+    mock_adb = MockAdbTools()
+    mock_grounder = MagicMock()
+    mock_grounder.ground.return_value = {
+        "element": "x", "bbox": None, "center": None, "conf": 0.0,
+        "found": False, "selected": None, "reason": "mock", "raw_response": "",
+    }
+
+    with tempfile.TemporaryDirectory() as tmp:
+        flow = Path(tmp) / "f.yaml"
+        flow.write_text(
+            'name: "t"\nversion: "1"\nsteps:\n'
+            '  - id: "wait1"\n    type: "wait"\n    seconds: 0.01\n',
+            encoding="utf-8",
+        )
+        engine = FlowEngine(
+            adb=mock_adb, grounder=mock_grounder, flow_path=str(flow),
+            output_dir=str(Path(tmp) / "out"), verbose=False,
+        )
+        engine.run()
+        assert engine.stats.get("wait_seconds", 0) >= 0.01, "等待时长应被统计"
+        assert engine.stats.get("api_seconds", -1) == 0.0, "mock grounder API 耗时应为 0"
+        assert engine.stats.get("elapsed", 0) >= 0.01, "总耗时应被统计"
     return "PASS ✓"
 
     return True
@@ -912,8 +941,9 @@ def main() -> None:
     print("\n── Suite 3c: debug/collect 输出模式 ──")
     for label, fn in [
         ("collect 引擎零输出", test_collect_mode_engine_no_output),
-        ("collect 计价保存路由", test_collect_mode_pricing_save_routing),
+        ("collect 打车页保存", test_collect_mode_pricing_saves_ride_page),
         ("标记图 debug 门控", test_annotation_gated_by_mode),
+        ("耗时统计", test_timing_stats_recorded),
     ]:
         try:
             s = fn()

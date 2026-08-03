@@ -83,7 +83,9 @@ class FlowEngine:
         self.timing = self.flow.get("timing", {})
         self.package = self.flow.get("package", "")
         self._shot_seq = 0
-        self.stats = {"vlm_calls": 0, "vlm_failures": 0, "steps_executed": 0}
+        self.stats = {"vlm_calls": 0, "vlm_failures": 0, "steps_executed": 0,
+              "api_seconds": 0.0, "wait_seconds": 0.0, "elapsed": 0.0}
+        self._wait_total = 0.0  # 累计流程等待时长
 
     # ------------------------------------------------------------------
     # 输出模式
@@ -110,6 +112,21 @@ class FlowEngine:
             self._scratch_dir = None
 
     # ------------------------------------------------------------------
+    # 耗时统计
+    # ------------------------------------------------------------------
+
+    def _wait(self, seconds: float, tag: str = "") -> None:
+        """带统计的等待：累加流程设定的等待时长。"""
+        if seconds and seconds > 0:
+            time.sleep(seconds)
+            self._wait_total += float(seconds)
+
+    def _api_seconds(self) -> float:
+        """当前累计 API 耗时（对 mock 兼容返回 0.0）。"""
+        v = getattr(self.grounder, "api_seconds", None)
+        return v if isinstance(v, (int, float)) else 0.0
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -118,6 +135,9 @@ class FlowEngine:
         name = self.flow.get("name", "unnamed")
         self._log(f"── {name} ──")
         self._shot_seq = 0
+        run_t0 = time.time()
+        api_t0 = self._api_seconds()
+        wait_t0 = self._wait_total
 
         for step in self.flow.get("steps", []):
             self.stats["steps_executed"] += 1
@@ -126,6 +146,9 @@ class FlowEngine:
             optional = step.get("optional", False)
 
             self._log(f"\n[{step_id}] ({step_type}) {step.get('description', '')}")
+            t0 = time.time()
+            api0 = self._api_seconds()
+            wait0 = self._wait_total
 
             try:
                 if step_type == "open_app":
@@ -159,8 +182,23 @@ class FlowEngine:
                 else:
                     raise
 
+            step_s = time.time() - t0
+            api_s = self._api_seconds() - api0
+            wait_s = self._wait_total - wait0
+            self._log(
+                f"  ⏱ [{step_id}] 步骤 {step_s:.1f}s | "
+                f"API {api_s:.1f}s | 等待 {wait_s:.1f}s"
+            )
+
+        self.stats["elapsed"] = time.time() - run_t0
+        self.stats["api_seconds"] = self._api_seconds() - api_t0
+        self.stats["wait_seconds"] = self._wait_total - wait_t0
         self._log(f"\n── {name} 完成 ──")
         self._log(f"步骤: {self.stats['steps_executed']}, VLM: {self.stats['vlm_calls']} 次")
+        self._log(
+            f"⏱ 总耗时 {self.stats['elapsed']:.1f}s | "
+            f"API {self.stats['api_seconds']:.1f}s | 等待 {self.stats['wait_seconds']:.1f}s"
+        )
 
     # ------------------------------------------------------------------
     # Step handlers
@@ -169,7 +207,7 @@ class FlowEngine:
     def _do_open_app(self, step: dict) -> None:
         pkg = step.get("package", self.package)
         self.adb.open_app(pkg)
-        time.sleep(self.timing.get("app_launch_wait", 3.0))
+        self._wait(self.timing.get("app_launch_wait", 3.0), "app_launch_wait")
 
     def _do_ground_click(self, step: dict) -> None:
         shot = self._screenshot(step.get("id", "step"))
@@ -193,7 +231,7 @@ class FlowEngine:
         center = self._vlm_ground_and_click(shot, desc, alts, step.get("id", "?"))
 
         if center:
-            time.sleep(self.timing.get("after_tap_wait", 2.0))
+            self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
             return
 
         # ── fallback ──
@@ -203,7 +241,7 @@ class FlowEngine:
             center = self._vlm_ground_and_click(shot, fallback.get("prompt", ""),
                                                  [], f"{step.get('id','?')}_fallback")
             if center:
-                time.sleep(self.timing.get("after_tap_wait", 2.0))
+                self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
                 return
 
         if step.get("mandatory"):
@@ -239,14 +277,14 @@ class FlowEngine:
             self._log(f"  ○ 首轮判断未选中 → 点击 ({cx},{cy})")
             self._annotate(shot, f"{step_id}_1", bbox, cx, cy, 0)
             self.adb.click(cx, cy)
-            time.sleep(self.timing.get("after_tap_wait", 2.0))
+            self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
         else:
             # 首轮没找到，尝试 alt_descs
             self._log("  ⚠ 首轮未找到元素，尝试 alt descs")
             center = self._vlm_ground_and_click(shot, desc, alts, f"{step_id}_1",
                                                  ref_image=ref_img, ref_images=ref_imgs)
             if center:
-                time.sleep(self.timing.get("after_tap_wait", 2.0))
+                self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
             else:
                 self._log("  ⚠ 首轮仍失败，继续重验证")
                 if step.get("mandatory"):
@@ -268,13 +306,13 @@ class FlowEngine:
             cx2, cy2 = result2["center"]
             self._annotate(shot2, f"{step_id}_retry", bbox2, cx2, cy2, 0)
             self.adb.click(cx2, cy2)
-            time.sleep(self.timing.get("after_tap_wait", 2.0))
+            self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
         else:
             center2 = self._vlm_ground_and_click(
                 shot2, desc, alts, f"{step_id}_retry",
                 ref_image=ref_img, ref_images=ref_imgs)
             if center2:
-                time.sleep(self.timing.get("after_tap_wait", 2.0))
+                self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
 
     def _do_scroll_until_visible(self, step: dict) -> None:
         """小步下滑直到 VLM 在截图中发现指定文字."""
@@ -299,7 +337,7 @@ class FlowEngine:
                 return
 
             self.adb.slide(sw // 2, y1, sw // 2, y2, 300)
-            time.sleep(0.5)
+            self._wait(0.5, "short_wait")
 
         self._log(f"  ⚠ 未找到「{target}」")
 
@@ -318,17 +356,17 @@ class FlowEngine:
 
         if center:
             # 点击输入框后稍等聚焦
-            time.sleep(0.3)
+            self._wait(0.3, "short_wait")
             self.adb.clear_text()
-            time.sleep(0.2)
+            self._wait(0.2, "short_wait")
             self.adb.type(value)
-            time.sleep(0.5)
+            self._wait(0.5, "short_wait")
         else:
             self._log(f"  ⚠ 找不到输入框，尝试直接输入")
             self.adb.clear_text()
-            time.sleep(0.2)
+            self._wait(0.2, "short_wait")
             self.adb.type(value)
-            time.sleep(0.5)
+            self._wait(0.5, "short_wait")
 
         # 2. Confirm
         self._screenshot(f"{step_id}_after_input")
@@ -361,7 +399,7 @@ class FlowEngine:
                 self._log("  ⚠ 找不到确认按钮，尝试回车")
                 self.adb.key_enter()
 
-        time.sleep(self.timing.get("after_confirm_wait", 3.0))
+        self._wait(self.timing.get("after_confirm_wait", 3.0), "after_confirm_wait")
 
     def _do_scroll(self, step: dict) -> None:
         direction = step.get("direction", "up")
@@ -377,14 +415,14 @@ class FlowEngine:
             elif direction == "half_down":
                 self.adb.slide(sw // 2, sh * 2 // 3, sw // 2, sh * 2 // 3 - sh // 2, duration)
 
-            time.sleep(step.get("after_wait", 1.0))
+            self._wait(step.get("after_wait", 1.0), "after_scroll")
 
         self._log(f"  ↕ 滑动: {direction} ×{repeat}")
 
     def _do_wait(self, step: dict) -> None:
         secs = step.get("seconds", 1.0)
         self._log(f"  ⏳ 等待 {secs}s")
-        time.sleep(secs)
+        self._wait(secs, "step_wait")
 
     def _do_screenshot(self, step: dict) -> None:
         self._screenshot(step.get("id", "shot"))
@@ -505,12 +543,12 @@ class FlowEngine:
                     prompt = strat.get("prompt", "")
                     if self._vlm_ground_and_click(current_shot, prompt, [],
                                                     "recovery"):
-                        time.sleep(self.timing.get("after_confirm_wait", 3.0))
+                        self._wait(self.timing.get("after_confirm_wait", 3.0), "after_confirm_wait")
                         return True
 
                 elif strat_type == "back_retry":
                     self.adb.back()
-                    time.sleep(1.5)
+                    self._wait(1.5, "short_wait")
 
         return False
 
@@ -536,7 +574,7 @@ class FlowEngine:
             if self.adb.get_screenshot(path):
                 return path
             self._log(f"  ⚠ 截图失败，重试 {attempt + 1}/3")
-            time.sleep(0.5)
+            self._wait(0.5, "short_wait")
         raise StepFailed(f"截图失败: {name}")
 
     def _annotate(self, image_path, step, bbox, cx, cy, attempt=0):

@@ -43,7 +43,6 @@ class RidePricingFSM:
         output_dir: str | None = None,
         verbose: bool = True,
         mode: str = "debug",
-        scratch_dir: str | None = None,
     ):
         self.adb = adb
         self.grounder = grounder
@@ -51,25 +50,42 @@ class RidePricingFSM:
         self.verbose = verbose
         self.output_dir = Path(output_dir or "./output")
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        # 输出模式: debug(每步截图+标记图) / collect(仅保存详细计价页截图)
+        # 输出模式: debug(每步截图+标记图) / collect(进入打车页后开始保存截图)
         self.mode = mode if mode in ("debug", "collect") else "debug"
-        self._capture_active = False  # 进入详细计价页后置 True，才开始保存截图
-        if scratch_dir:
-            self.scratch_dir = Path(scratch_dir)
-        elif self.debug_mode:
-            self.scratch_dir = None
-        else:
-            self.scratch_dir = Path(tempfile.mkdtemp(prefix="collector_scratch_"))
         self.steps_cfg = profile_cfg.get("steps", {})
         self.timing = profile_cfg.get("timing", {})
         self.collection_cfg = profile_cfg.get("collection", {})
         self._top_seq = 0       # p01, p02, ...
         self._sub_seq = 0       # _01, _02, ... (reset per sub-step)
-        self.stats = {"vlm_calls": 0, "vlm_failures": 0}
+        self.stats = {"vlm_calls": 0, "vlm_failures": 0,
+                      "api_seconds": 0.0, "wait_seconds": 0.0, "elapsed": 0.0}
+        self._wait_total = 0.0  # 累计流程等待时长
 
     @property
     def debug_mode(self) -> bool:
         return self.mode == "debug"
+
+    # ------------------------------------------------------------------
+    # 耗时统计
+    # ------------------------------------------------------------------
+
+    def _wait(self, seconds: float, tag: str = "") -> None:
+        """带统计的等待：累加流程设定的等待时长。"""
+        if seconds and seconds > 0:
+            time.sleep(seconds)
+            self._wait_total += float(seconds)
+
+    def _api_seconds(self) -> float:
+        """当前累计 API 耗时（对 mock 兼容返回 0.0）。"""
+        v = getattr(self.grounder, "api_seconds", None)
+        return v if isinstance(v, (int, float)) else 0.0
+
+    def _log_step_timing(self, label: str, t0: float, api0: float, wait0: float) -> None:
+        """输出某一步骤/阶段的耗时统计。"""
+        self._log(
+            f"  ⏱ {label}: 步骤 {time.time() - t0:.1f}s | "
+            f"API {self._api_seconds() - api0:.1f}s | 等待 {self._wait_total - wait0:.1f}s"
+        )
 
     # ==================================================================
     # Screenshot helpers with nested numbering
@@ -85,9 +101,8 @@ class RidePricingFSM:
         return self._save(f"p{self._top_seq:02d}_{self._sub_seq:02d}_{name}")
 
     def _save(self, stem: str) -> str:
-        """保存截图。collect 模式：未进入详细计价页(_capture_active=False)时写临时目录。"""
-        target = self.output_dir if (self.debug_mode or self._capture_active) else (self.scratch_dir or self.output_dir)
-        path = str(target / f"{stem}.jpg")
+        """保存截图。collect 模式：计价采集阶段(进入打车页后)全部保存，含打车页滑动与详细计价页。"""
+        path = str(self.output_dir / f"{stem}.jpg")
         self._ensure_screenshot(path)
         return path
 
@@ -100,10 +115,21 @@ class RidePricingFSM:
         self._top_seq = 0
         screenshots: list[str] = []
         target_count = self.collection_cfg.get("max_suppliers", 2)
+        run_t0 = time.time()
+        api_t0 = self._api_seconds()
+        wait_t0 = self._wait_total
+
+        # ── 刚进打车页（collect 模式从此开始保存截图）──
+        screenshots.append(self._shot("ride_page_entry"))
 
         # ── S0 + S1 ──
+        t0, a0, w0 = time.time(), self._api_seconds(), self._wait_total
         self._s0_scroll_up()
+        self._log_step_timing("S0 上滑", t0, a0, w0)
+
+        t0, a0, w0 = time.time(), self._api_seconds(), self._wait_total
         self._s1_tap_select_all()
+        self._log_step_timing("S1 全选经济", t0, a0, w0)
         screenshots.append(self._shot("after_select_all"))
 
         # ── 循环 ──
@@ -119,7 +145,7 @@ class RidePricingFSM:
             if not new_suppliers:
                 self._log("  当前屏无新供应商")
                 self._swipe_down("s4_nomore")
-                time.sleep(self.collection_cfg.get("after_scroll_wait", 1.0))
+                self._wait(self.collection_cfg.get("after_scroll_wait", 1.0), "after_scroll_wait")
                 scroll_round += 1
                 candidates = self._s2_list_suppliers()
                 new_suppliers = [s for s in candidates if s not in attempted]
@@ -139,6 +165,7 @@ class RidePricingFSM:
                 idx = len(collected) + 1
                 self._log(f"  [{idx}/{target_count}] 「{supp_name}」→ 开始采集")
 
+                t0, a0, w0 = time.time(), self._api_seconds(), self._wait_total
                 ok = self._s3a_tap_question(supp_name)
                 if not ok:
                     self._log(f"    ✗ 「{supp_name}」找不到问号，跳过")
@@ -148,6 +175,7 @@ class RidePricingFSM:
 
                 screenshots.append(self._shot(f"popup_{supp_name}"))
                 self._s3c_collect_detail_rules(supp_name)
+                self._log_step_timing(f"S3 「{supp_name}」", t0, a0, w0)
                 collected.append(supp_name)
                 self._log(f"    ✓ 「{supp_name}」完成 ({len(collected)}/{target_count})")
 
@@ -156,18 +184,25 @@ class RidePricingFSM:
 
             self._log("  ↓ 下滑 1/3 屏")
             self._swipe_down("s4_next")
-            time.sleep(self.collection_cfg.get("after_scroll_wait", 1.0))
+            self._wait(self.collection_cfg.get("after_scroll_wait", 1.0), "after_scroll_wait")
             scroll_round += 1
 
+        self.stats["elapsed"] = time.time() - run_t0
+        self.stats["api_seconds"] = self._api_seconds() - api_t0
+        self.stats["wait_seconds"] = self._wait_total - wait_t0
         self._log("─" * 50)
         self._log(f"完成: {len(collected)} 个 → {', '.join(collected)}")
         self._log(f"VLM: {self.stats['vlm_calls']} 次")
+        self._log(
+            f"⏱ 计价采集总耗时 {self.stats['elapsed']:.1f}s | "
+            f"API {self.stats['api_seconds']:.1f}s | 等待 {self.stats['wait_seconds']:.1f}s"
+        )
         screenshots.append(self._shot("all_done"))
 
         shot_home = self._shot("before_home")
         self._annotate_action_label(shot_home, "home", "Press HOME")
         self.adb.home()
-        time.sleep(0.5)
+        self._wait(0.5, "short_wait")
         return screenshots
 
     # ==================================================================
@@ -182,7 +217,7 @@ class RidePricingFSM:
         x2, y2 = sw // 2, sh // 4
         self._annotate_swipe(shot, "s0_scroll_up", x1, y1, x2, y2)
         self.adb.slide(x1, y1, x2, y2, self.collection_cfg.get("swipe_duration_ms", 400))
-        time.sleep(self.collection_cfg.get("after_scroll_wait", 1.0))
+        self._wait(self.collection_cfg.get("after_scroll_wait", 1.0), "after_scroll_wait")
 
     # ==================================================================
     # S1
@@ -227,7 +262,7 @@ class RidePricingFSM:
             if cx is not None:
                 self._annotate_click(shot, "s1_click", result.get("bbox"), cx, cy)
                 self.adb.click(cx, cy)
-                time.sleep(self.timing.get("after_tap_wait", 2.0))
+                self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
 
         # ── double check: 不论是否点击，截图再次验证 ──
         self._log("  🔍 Double check: 再次验证全选状态")
@@ -247,7 +282,7 @@ class RidePricingFSM:
             if cx2 is not None:
                 self._annotate_click(shot2, "s1_click_retry", result2.get("bbox"), cx2, cy2)
                 self.adb.click(cx2, cy2)
-                time.sleep(self.timing.get("after_tap_wait", 2.0))
+                self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
 
     # ==================================================================
     # S2
@@ -318,7 +353,7 @@ class RidePricingFSM:
         self._log(f"    问号 at ({cx},{cy})")
         self._annotate_click(shot, f"q_{supplier}", result.get("bbox"), cx, cy)
         self.adb.click(cx, cy)
-        time.sleep(self.collection_cfg.get("pricing_page_wait", 2.0))
+        self._wait(self.collection_cfg.get("pricing_page_wait", 2.0), "pricing_page_wait")
         return True
 
     # ==================================================================
@@ -339,13 +374,11 @@ class RidePricingFSM:
             cx, cy = result["center"]
             self._annotate_click(shot, f"detail_btn_{supplier}", result.get("bbox"), cx, cy)
             self.adb.click(cx, cy)
-            time.sleep(self.timing.get("after_confirm_wait", 2.0))
+            self._wait(self.timing.get("after_confirm_wait", 2.0), "after_confirm_wait")
         else:
             self._log("    ⚠ 未找到详细计价规则入口")
             return False
 
-        # 已进入详细计价页 → collect 模式从这里开始保存截图
-        self._capture_active = True
         self._shot(f"detail_page_{supplier}")
 
         # ── 子步骤编号器 ──
@@ -364,7 +397,6 @@ class RidePricingFSM:
         self._tap_back_arrow(f"detail_exit_to_popup_{supplier}")
         self._log("      返回 → 打车页")
         self._tap_back_arrow(f"detail_exit_to_ride_{supplier}")
-        self._capture_active = False  # 已回到打车页，停止保存
         return True
 
     def _tap_tab_and_scroll(self, tab_label: str, supplier: str) -> None:
@@ -377,7 +409,7 @@ class RidePricingFSM:
             cx, cy = result["center"]
             self._annotate_click(shot, f"tab_{tab_label}_{supplier}", result.get("bbox"), cx, cy)
             self.adb.click(cx, cy)
-            time.sleep(1.0)
+            self._wait(1.0, "tab_wait")
 
         self._scroll_to_bottom(tab_label, supplier)
         self._sub_seq += 1
@@ -400,11 +432,11 @@ class RidePricingFSM:
             cx, cy = result["center"]
             self._annotate_click(shot, tag, result.get("bbox"), cx, cy)
             self.adb.click(cx, cy)
-            time.sleep(self.timing.get("after_tap_wait", 2.0))
+            self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
         else:
             self._annotate_action_label(shot, tag, "BACK key")
             self.adb.back()
-            time.sleep(1.5)
+            self._wait(1.5, "back_wait")
 
     def _swipe_down(self, tag: str) -> None:
         """下滑 1/3 屏."""
@@ -430,7 +462,7 @@ class RidePricingFSM:
             shot = self._shot(f"{tab}_scroll_{i}_{supplier}")
             self._annotate_swipe(shot, f"{tab}_scroll_{i}_{supplier}", sw // 2, y1, sw // 2, y2)
             self.adb.slide(sw // 2, y1, sw // 2, y2, 300)
-            time.sleep(0.5)
+            self._wait(0.5, "short_wait")
 
             if i >= 2 and (i % 3 == 0 or i == max_swipes - 1):
                 check = self._shot(f"{tab}_check_{i}_{supplier}")
@@ -447,7 +479,7 @@ class RidePricingFSM:
         sw, sh = self._screen_size
         for i in range(3):
             self.adb.slide(sw // 2, sh // 4, sw // 2, sh * 3 // 4, 150)
-            time.sleep(0.2)
+            self._wait(0.2, "short_wait")
         self._log(f"      {tab} 回顶完成")
 
     # ==================================================================
@@ -530,7 +562,7 @@ class RidePricingFSM:
             if self.adb.get_screenshot(path):
                 return True
             self._log(f"  ⚠ 截图重试 {attempt+1}/3")
-            time.sleep(0.5)
+            self._wait(0.5, "short_wait")
         return False
 
     def _log(self, msg: str) -> None:

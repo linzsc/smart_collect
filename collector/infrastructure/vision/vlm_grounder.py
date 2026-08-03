@@ -226,6 +226,9 @@ class VLMGrounder:
         self.max_retry = min(max(max_retry, 1), 10)
         self.temperature = temperature
         self.image_max_pixels = image_max_pixels
+        # 耗时统计
+        self.api_seconds = 0.0   # 累计 API 调用耗时
+        self.api_calls = 0       # 累计 API 调用次数
 
         self.client = OpenAI(
             api_key=api_key,
@@ -433,14 +436,18 @@ class VLMGrounder:
         """
         wait_sec = self.RETRY_WAITING_SECONDS
         for attempt in range(self.max_retry):
+            t0 = time.time()
             try:
                 completion = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
                     temperature=self.temperature,
                 )
+                self.api_seconds += time.time() - t0
+                self.api_calls += 1
                 return (completion.choices[0].message.content or ""), True
             except Exception as e:
+                self.api_seconds += time.time() - t0
                 print(f"  [VLM] API error (attempt {attempt + 1}/{self.max_retry}): {e}")
                 if attempt < self.max_retry - 1:
                     time.sleep(wait_sec)

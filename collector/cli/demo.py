@@ -172,6 +172,8 @@ def main() -> None:
     print(f"\n[Flow] 耗时: {elapsed:.1f}s")
     print(f"[Flow] VLM: {engine.stats['vlm_calls']} 次调用, "
           f"失败: {engine.stats['vlm_failures']}")
+    print(f"[Flow] API: {engine.stats.get('api_seconds', 0):.1f}s | "
+          f"等待: {engine.stats.get('wait_seconds', 0):.1f}s")
 
 
 if __name__ == "__main__":

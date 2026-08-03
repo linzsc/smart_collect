@@ -54,12 +54,13 @@ def handle_pricing_collect(engine, step: dict) -> None:
         output_dir=str(engine.output_dir),
         verbose=engine.verbose,
         mode=engine.mode,
-        scratch_dir=str(engine.scratch_dir) if engine.scratch_dir else None,
     )
     pricer.run()
-    # 合并 VLM 统计
+    # 合并 VLM / 耗时统计
     engine.stats["vlm_calls"] += pricer.stats.get("vlm_calls", 0)
     engine.stats["vlm_failures"] += pricer.stats.get("vlm_failures", 0)
+    engine.stats["api_seconds"] = engine.stats.get("api_seconds", 0.0) + pricer.stats.get("api_seconds", 0.0)
+    engine.stats["wait_seconds"] = engine.stats.get("wait_seconds", 0.0) + pricer.stats.get("wait_seconds", 0.0)
 
 
 # ---------------------------------------------------------------------------
