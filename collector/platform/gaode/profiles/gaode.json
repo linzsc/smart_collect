@@ -10,7 +10,10 @@
     "app_launch_wait": 3.0,
     "after_input_wait": 1.0,
     "after_tap_wait": 2.0,
-    "after_confirm_wait": 3.0,
+    "after_confirm_wait": 1.5,
+    "tab_wait": 0.5,
+    "back_wait": 0.8,
+    "scroll_top_wait": 0.1,
     "pricing_page_wait": 2.0
   },
   "steps": {
@@ -71,8 +74,10 @@
     "page1_scroll_half_screens": 3,
     "page2_scroll_half_screens": 6,
     "swipe_duration_ms": 400,
-    "max_suppliers": 2,
+    "max_suppliers": 10,
     "max_detail_swipes": 12,
-    "max_scroll_rounds": 15
+    "max_scroll_rounds": 15,
+    "pricing_page_wait": 1.2,
+    "detail_scroll_wait": 0.3
   }
 }

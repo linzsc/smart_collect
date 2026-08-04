@@ -319,6 +319,152 @@ def test_scroll_to_bottom_marker_or_stable():
     assert fsm3._page_unchanged.call_count == 2, fsm3._page_unchanged.call_count
     return "PASS ✓"
 
+
+
+def test_collect_suppliers_loop():
+    """CAP-06: 采集循环 — 达到目标数 或 经济型采完（列表无新运力商）即结束。
+
+    A) 经济型只有 3 个、目标 10 → 采完 3 个后因「无新运力商」退出（不达 10）;
+    B) 目标 2、列表给 3 个 → 采到 2 个即停（不采第 3 个、不滑动）;
+    C) 找不到问号的运力商被跳过，其余照常采集。
+    """
+    import tempfile
+
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    def _mkfsm():
+        mock_adb = MagicMock()
+        type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
+        fsm = RidePricingFSM(
+            adb=mock_adb, grounder=MagicMock(), supplier="经济型",
+            profile_cfg={}, output_dir=str(Path(tempfile.gettempdir()) / "cap06_out"),
+            verbose=False,
+        )
+        fsm._wait = MagicMock()
+        fsm._swipe_down = MagicMock()
+        fsm._s3c_collect_detail_rules = MagicMock(return_value=True)
+        return fsm
+
+    # A) 3 个运力商、目标 10 → 全部采完，经济型采完退出
+    fsm = _mkfsm()
+    fsm._s2_list_suppliers = MagicMock(side_effect=[["快车", "特惠快车", "拼车"], [], []])
+    fsm._s3a_tap_question = MagicMock(return_value=True)
+    collected = fsm._collect_suppliers(10, [])
+    assert collected == ["快车", "特惠快车", "拼车"], collected
+    # 列表采完下滑1次(s4_next) + 确认空列表下滑1次(s4_nomore) = 2 次
+    assert fsm._swipe_down.call_count == 2, fsm._swipe_down.call_count
+
+    # B) 目标 2、列表给 3 个 → 采到 2 个即停（不采第 3 个、不滑动）
+    fsm2 = _mkfsm()
+    fsm2._s2_list_suppliers = MagicMock(return_value=["快车", "特惠快车", "拼车"])
+    fsm2._s3a_tap_question = MagicMock(return_value=True)
+    collected2 = fsm2._collect_suppliers(2, [])
+    assert collected2 == ["快车", "特惠快车"], collected2
+    assert fsm2._s3a_tap_question.call_count == 2, fsm2._s3a_tap_question.call_count
+    assert fsm2._swipe_down.call_count == 0, fsm2._swipe_down.call_count
+
+    # C) 找不到问号的运力商被跳过，其余照常采集
+    fsm3 = _mkfsm()
+    fsm3._s2_list_suppliers = MagicMock(side_effect=[["快车", "特惠快车"], [], []])
+    fsm3._s3a_tap_question = MagicMock(side_effect=[True, False])
+    collected3 = fsm3._collect_suppliers(10, [])
+    assert collected3 == ["快车"], collected3
+    assert fsm3._swipe_down.call_count == 2, fsm3._swipe_down.call_count
+    return "PASS ✓"
+
+
+
+def test_swipe_down_screenshot_and_half_distance():
+    """CAP-07: 打车页滑动 — 每次滑动都截图，且距离为 1/6 屏（原 1/3 屏的一半）。"""
+    import tempfile
+
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    mock_adb = MagicMock()
+    type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
+    fsm = RidePricingFSM(
+        adb=mock_adb, grounder=MagicMock(), supplier="x",
+        profile_cfg={}, output_dir=str(Path(tempfile.gettempdir()) / "swipe_out"),
+        verbose=False,
+    )
+    fsm._shot = MagicMock(return_value="/fake/s4_next.jpg")
+    fsm._wait = MagicMock()
+
+    fsm._swipe_down("s4_next")
+
+    # 每次滑动都截图
+    fsm._shot.assert_called_once_with("s4_next")
+
+    # 距离 = sh // 6 = 2400 // 6 = 400（原 1/3 屏 800 的一半）
+    args = mock_adb.slide.call_args.args
+    x1, y1, x2, y2 = args[0], args[1], args[2], args[3]
+    assert y1 - y2 == 400, f"滑动距离应 sh//6=400, 实际 {y1 - y2}"
+    assert x1 == x2 == 540, (x1, x2)
+    assert y1 == 1600 and y2 == 1200, (y1, y2)
+    return "PASS ✓"
+
+
+
+def test_tap_back_arrow_deterministic():
+    """PERF-02: 返回导航确定性化 — 直接 adb.back()，不调 VLM ground/click，等待 back_wait。"""
+    import tempfile
+
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    mock_adb = MagicMock()
+    mock_grounder = MagicMock()
+    fsm = RidePricingFSM(
+        adb=mock_adb, grounder=mock_grounder, supplier="x",
+        profile_cfg={"timing": {"back_wait": 0.0}},
+        output_dir=str(Path(tempfile.gettempdir()) / "back_out"),
+        verbose=False,
+    )
+    fsm._shot = MagicMock(return_value="/fake/detail_exit.jpg")
+    fsm._wait = MagicMock()
+
+    fsm._tap_back_arrow("detail_exit")
+
+    mock_adb.back.assert_called_once()
+    mock_grounder.ground.assert_not_called()
+    mock_adb.click.assert_not_called()
+    fsm._wait.assert_called_once_with(0.0, "back_wait")
+    fsm._shot.assert_called_once_with("detail_exit")
+    return "PASS ✓"
+
+
+
+def test_tab_coordinate_reuse():
+    """PERF-03: 标签坐标首次 LLM 记录后复用，后续不再调 LLM/截图，直接点击。"""
+    import tempfile
+
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    mock_adb = MagicMock()
+    type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
+    mock_grounder = MagicMock()
+    mock_grounder.ground.return_value = {
+        "found": True, "center": [500, 300], "bbox": [450, 250, 550, 350],
+    }
+    fsm = RidePricingFSM(
+        adb=mock_adb, grounder=mock_grounder, supplier="x",
+        profile_cfg={"timing": {"tab_wait": 0.0}},
+        output_dir=str(Path(tempfile.gettempdir()) / "tab_out"),
+        verbose=False,
+    )
+    fsm._shot = MagicMock(return_value="/fake/detail_before.jpg")
+    fsm._wait = MagicMock()
+    fsm._scroll_to_bottom = MagicMock(return_value=True)
+
+    fsm._tap_tab_and_scroll("工作日", "曹操出行")
+    fsm._tap_tab_and_scroll("工作日", "火箭出行")
+
+    # 首次 ground 一次并缓存，第二次复用坐标直接点击
+    assert mock_grounder.ground.call_count == 1, mock_grounder.ground.call_count
+    assert mock_adb.click.call_count == 2, mock_adb.click.call_count
+    assert fsm._shot.call_count == 1, fsm._shot.call_count  # 仅首次截图
+    assert fsm._tab_coords.get("工作日") == (500, 300), fsm._tab_coords
+    return "PASS ✓"
+
 # ======================================================================
 # Suite 2: FSM 完整流程 Mock 测试
 # ======================================================================
@@ -440,6 +586,15 @@ def test_fsm_full_flow():
     print(f"  [Mock FSM] 页面无变化比对: {mock_pu.call_count} 次")
     assert mock_pu.call_count == 10, \
         f"未命中标记时应评估页面无变化, 预期 10 次, 实际 {mock_pu.call_count}"
+
+    # 4f. PERF-03: 工作日/休息日标签坐标仅首次 LLM 记录，后续复用（共 2 次 ground）
+    tab_grounds = [
+        c for c in ground_calls
+        if len(c.args) > 1 and ("工作日" in str(c.args[1]) or "休息日" in str(c.args[1]))
+    ]
+    print(f"  [Mock FSM] 标签定位 ground: {len(tab_grounds)} 次")
+    assert len(tab_grounds) == 2, \
+        f"标签坐标应仅首次记录(工作日+休息日各1次), 实际 {len(tab_grounds)}"
 
     # 5. S3a 问号: ground 中应有 ref_image=button_to_price.png
     question_calls = [
@@ -1099,6 +1254,10 @@ def main() -> None:
         ("RES-01 结果整理聚合",      test_screenshot_organizer),
         ("CAP-05 页面无变化判定",     test_page_unchanged),
         ("CAP-05 标记或稳定退出",     test_scroll_to_bottom_marker_or_stable),
+        ("CAP-06 采集循环终止条件",   test_collect_suppliers_loop),
+        ("CAP-07 打车页滑动截图+减半", test_swipe_down_screenshot_and_half_distance),
+        ("PERF-02 返回确定性化",      test_tap_back_arrow_deterministic),
+        ("PERF-03 标签坐标复用",      test_tab_coordinate_reuse),
     ]
     for label, fn in suite1:
         try:

@@ -190,6 +190,8 @@ collector/
 | CAP-03 | 自适应滑动控制 | `TODO` | 根据实测位移调整手势，循环有上限 |
 | CAP-04 | Probe/Keyframe与Manifest | `TODO` | 最少关键帧覆盖完整内容，产物可追踪 |
 | CAP-05 | 详情页退出条件：预约用车或页面无变化 | `DONE` | 出现“预约用车”**或**页面不再变化即停止滚动（本地像素比对）；离线测试通过 |
+| CAP-06 | 经济型运力商批量采集（目标10/采完即停） | `DONE` | 达到 max_suppliers=10 或「全选经济」下识别到的运力商采完即结束；列表最后一个采完且不够时下滑打车页查看新运力商；找不到问号跳过 |
+| CAP-07 | 打车页滑动：每次截图 + 距离减半 | `DONE` | 打车页列表每次下滑 1/6 屏（原 1/3 屏的一半）并截图；离线测试通过 |
 | VER-01 | 关键页面StateVerifier | `TODO` | 关键动作均有明确后置验证 |
 | INT-01 | 接入现有线上识别服务 | `TODO` | 支持超时、重试、幂等和原始响应保存 |
 | QC-01 | 测试集、Ground Truth与数据Diff | `TODO` | 可区分采集缺失、识别错误、重复和合并错误 |
@@ -203,6 +205,8 @@ collector/
 | ARCH-07 | collect 模式采集打车页 + 耗时统计 | `DONE` | collect 保存打车页(含滑动)与详细计价页；输出每步/API/等待耗时；离线测试通过 |
 | SEL-01 | 目标锚定的幂等全选 ensure_all_selected | `DONE` | 定位/判定拆分，仅判主勾选框ROI；素材100次成功率100%(700/700)；点击后重验；真机验证通过 |
 | RES-01 | 采集结果整理（必要截图筛选+聚合） | `DONE` | output 筛选打车页(select_all_after)+每(标签×运力商)前4张滚动截图，聚合到 result/工作日|休息日/{冒泡页,<运力商>}/，打车页入冒泡页（每大文件夹1次共2次）；离线测试+真实 output 验证通过 |
+| PERF-03 | 标签坐标复用 + 详情页等待再收敛（方案五） | `DONE` | 工作日/休息日标签坐标首次 LLM 记录后复用（不调 LLM/不截图）；tab_wait 0.5 / detail_scroll_wait 0.3 / scroll_top_wait 0.1 / back_wait 0.8；详见 耗时优化方案-2026-08.md |
+| PERF-02 | 返回导航确定性化 + 确定性等待收敛（方案一+二） | `DONE` | 详细页→弹窗→打车页直接 adb.back() 不调 VLM；pricing_page_wait 1.2s / after_confirm_wait 1.5s / tab_wait 0.8s / back_wait 1.0s；详见 耗时优化方案-2026-08.md |
 | PERF-01 | 耗时优化（P2） | `TODO` | 减少截图/标注/固定等待与VLM调用开销；collect 模式耗时归因准确 |
 
 计划维护规则：
@@ -260,8 +264,12 @@ python -m compileall collector tests
 | 2026-08-04 | RUN-01 | `DONE` | 真机 v2 debug 全流程跑通（起终点→计价采集2家）；S1 全选经济目标锚定：未勾选→点击→已勾选；耗时 250.4s（API 58.3s/等待52.2s） | 真机日志（run_real_test.txt） |
 | 2026-08-04 | CAP-01 | `DONE` | 详细计价页每次滑动后调用LLM判断蓝色“预约用车”：检测到即停止滚动并回顶后继续（工作日回顶→休息日，休息日采完退出）；_detect_end_marker 独立方法并计入 vlm_calls；_scroll_to_bottom 返回检测结果 | compileall + test_double_check + test_pricing_collect（Suite1 检测解析 / Suite2 每次滑动检测·终止滚动·回顶）通过；真实素材 VLM 验证：工作日第4张/休息日第3张检测到「预约用车」，流程可完成 |
 | 2026-08-04 | CAP-05 | `DONE` | 详情页退出条件改为“预约用车”**或**页面不再变化：新增 _page_unchanged 本地像素比对（缩放灰度+裁状态栏+阈值）；每次滑动后未命中标记即评估页面是否无变化；max_detail_swipes 可配 | test_pricing_collect（CAP-05 页面比对/标记或稳定退出 + FSM 全流程）通过 |
+| 2026-08-04 | CAP-06 | `DONE` | 运力商采集循环重构为 _collect_suppliers：目标 max_suppliers=10；终止=达到目标或经济型采完（下滑确认无新列表）；列表最后一个采完不够则下滑打车页看新运力商；找不到问号跳过 | test_pricing_collect（CAP-06 采集循环终止条件 + FSM 全流程回归）通过 |
+| 2026-08-04 | CAP-07 | `DONE` | _swipe_down 距离 1/3 屏 → 1/6 屏，每次滑动仍截图（s4_next/s4_nomore） | test_pricing_collect（CAP-07 滑动截图+距离断言）通过 |
 | 2026-08-04 | DOC-03 | `DONE` | codex.md/CLAUDE.md 增加 §4.4：禁止主动 commit/push，仅用户显式「push」时提交推送 | 文档检查 |
 | 2026-08-04 | RES-01 | `DONE` | 新增 screenshot_organizer：必要截图=打车页(select_all_after)+每(标签×运力商)scroll_0..3；聚合 result/工作日|休息日/{冒泡页,<运力商>}/，打车页入冒泡页（每大文件夹1次共2次）；handle_pricing_collect 结束后调用；output 缺失/为空安全跳过；result/ 加入 .gitignore | test_pricing_collect（含 RES-01 聚合测试）通过；真实 output/ 验证 18 张/冒泡页×2+4组结构正确 |
+| 2026-08-04 | PERF-03 | `DONE` | 标签坐标复用（_tab_coords 缓存，首次 LLM 记录后续直接点击）+ 详情页等待再收敛（tab_wait 0.5/detail_scroll_wait 0.3/scroll_top_wait 0.1/back_wait 0.8） | test_pricing_collect（PERF-03 标签复用测试 + 全流程断言标签 ground=2）通过 |
+| 2026-08-04 | PERF-02 | `DONE` | 返回导航确定性化（adb.back() 替代 VLM ground）+ 确定性等待收敛（back_wait 1.0/tab_wait 0.8/pricing_page_wait 1.2/after_confirm_wait 1.5）；新建 耗时优化方案-2026-08.md | test_pricing_collect（含 PERF-02 返回确定性化测试 + 全流程回归）通过 |
 | 2026-08-04 | PERF-01 | `TODO` | 耗时优化 P2：debug 模式非准确耗时；API/等待/设备+编码三块归因，待优化 | 250.4s 真机日志归因 |
 
 ## 9. AI交付格式
