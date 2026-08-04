@@ -65,17 +65,19 @@ def test_s2_parse_json_array():
 
 
 def test_s2_parse_excludes_taxi_and_youxiang():
-    """S2: 排除「出租车」和「优享」"""
-    raw = '["快车", "出租车", "特惠快车", "优享", "拼车"]'
-    from collector.platform.gaode.ride_pricing import _SKIP_SUPPLIERS
+    """S2/CAP-08: 排除出租车/的士/出租/优享等非经济型运力商"""
+    raw = '["快车", "出租车", "北京的士", "北京新出租", "特惠快车", "优享", "拼车"]'
+    from collector.platform.gaode.ride_pricing import _SKIP_KEYWORDS
 
     cleaned = raw.strip()
     parsed = json.loads(cleaned)
-    suppliers = [n for n in parsed if not any(kw in n for kw in _SKIP_SUPPLIERS)]
+    suppliers = [n for n in parsed if not any(kw in n for kw in _SKIP_KEYWORDS)]
     assert "快车" in suppliers
     assert "特惠快车" in suppliers
     assert "拼车" in suppliers
     assert "出租车" not in suppliers
+    assert "北京的士" not in suppliers
+    assert "北京新出租" not in suppliers
     assert "优享" not in suppliers
     return "PASS ✓", suppliers
 
@@ -370,6 +372,14 @@ def test_collect_suppliers_loop():
     collected3 = fsm3._collect_suppliers(10, [])
     assert collected3 == ["快车"], collected3
     assert fsm3._swipe_down.call_count == 2, fsm3._swipe_down.call_count
+
+    # D) 详细计价采集失败（S3c 返回 False）→ 不计入 collected
+    fsm4 = _mkfsm()
+    fsm4._s2_list_suppliers = MagicMock(side_effect=[["快车", "特惠快车"], [], []])
+    fsm4._s3a_tap_question = MagicMock(return_value=True)
+    fsm4._s3c_collect_detail_rules = MagicMock(side_effect=[True, False])
+    collected4 = fsm4._collect_suppliers(10, [])
+    assert collected4 == ["快车"], collected4  # 特惠快车 S3c 失败不计入
     return "PASS ✓"
 
 
@@ -463,6 +473,30 @@ def test_tab_coordinate_reuse():
     assert mock_adb.click.call_count == 2, mock_adb.click.call_count
     assert fsm._shot.call_count == 1, fsm._shot.call_count  # 仅首次截图
     assert fsm._tab_coords.get("工作日") == (500, 300), fsm._tab_coords
+    return "PASS ✓"
+
+
+
+def test_s3a_no_question_no_crash():
+    """CAP-08: 找不到问号时 _s3a_tap_question 返回 False，不崩溃、不点击。"""
+    import tempfile
+
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    mock_adb = MagicMock()
+    type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
+    mock_grounder = MagicMock()
+    mock_grounder.ground.return_value = {"found": False, "center": None, "bbox": [0, 0, 0, 0]}
+    fsm = RidePricingFSM(
+        adb=mock_adb, grounder=mock_grounder, supplier="x",
+        profile_cfg={}, output_dir=str(Path(tempfile.gettempdir()) / "s3a_out"),
+        verbose=False,
+    )
+    fsm._shot = MagicMock(return_value="/fake/q.jpg")
+    fsm._wait = MagicMock()
+
+    assert fsm._s3a_tap_question("北京新出租") is False
+    mock_adb.click.assert_not_called()
     return "PASS ✓"
 
 # ======================================================================
@@ -1258,6 +1292,7 @@ def main() -> None:
         ("CAP-07 打车页滑动截图+减半", test_swipe_down_screenshot_and_half_distance),
         ("PERF-02 返回确定性化",      test_tap_back_arrow_deterministic),
         ("PERF-03 标签坐标复用",      test_tab_coordinate_reuse),
+        ("CAP-08 找不到问号不崩溃",   test_s3a_no_question_no_crash),
     ]
     for label, fn in suite1:
         try:

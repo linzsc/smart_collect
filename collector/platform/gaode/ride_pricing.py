@@ -25,7 +25,8 @@ from collector.infrastructure.device.adb_utils import AdbTools
 from collector.infrastructure.vision.vlm_grounder import VLMGrounder
 
 _REF_QUESTION_ICON = "assets/button_to_price.png"
-_SKIP_SUPPLIERS = {"出租车", "优享"}
+_SKIP_SUPPLIERS = {"出租车", "优享"}          # 精确匹配（兼容旧引用）
+_SKIP_KEYWORDS = ("的士", "出租", "优享")      # 关键词：出租车/的士/优享类一律不采集（CAP-08）
 # 详细计价页终点标记：出现蓝色「预约用车」即停止滚动（CAP-01）
 _END_MARKER = "预约用车"
 
@@ -209,10 +210,12 @@ class RidePricingFSM:
                     continue
 
                 screenshots.append(self._shot(f"popup_{supp_name}"))
-                self._s3c_collect_detail_rules(supp_name)
-                self._log_step_timing(f"S3 「{supp_name}」", t0, a0, w0)
-                collected.append(supp_name)
-                self._log(f"    ✓ 「{supp_name}」完成 ({len(collected)}/{target_count})")
+                if self._s3c_collect_detail_rules(supp_name):
+                    self._log_step_timing(f"S3 「{supp_name}」", t0, a0, w0)
+                    collected.append(supp_name)
+                    self._log(f"    ✓ 「{supp_name}」完成 ({len(collected)}/{target_count})")
+                else:
+                    self._log(f"    ✗ 「{supp_name}」详细计价采集失败，不计入")
 
             if len(collected) >= target_count:
                 self._log(f"  已达目标 {target_count} 个，停止")
@@ -282,7 +285,7 @@ class RidePricingFSM:
             "高德打车页面。"
             "以 JSON 数组列出「经济型」分组标题**下方**所有供应商名称。"
             "只列经济型下面的行，且有「预估」和「?」问号的。"
-            "排除「出租车」「优享」。"
+            "排除出租车/的士/出租/优享等非经济型运力商。"
             '格式: ["快车", "特惠快车"] 无则 []。'
         )
         self.stats["vlm_calls"] += 1
@@ -302,7 +305,7 @@ class RidePricingFSM:
             if isinstance(parsed, list):
                 for n in parsed:
                     n = str(n).strip()
-                    if n and not any(kw in n for kw in _SKIP_SUPPLIERS):
+                    if n and not any(kw in n for kw in _SKIP_KEYWORDS):
                         if n not in suppliers:
                             suppliers.append(n)
                 return suppliers
@@ -312,7 +315,7 @@ class RidePricingFSM:
         for line in raw.split("\n"):
             line = re.sub(r'^[\d\.\、\)）\-\s]+', '', line.strip())
             line = line.strip().strip('"').strip("'").strip(",")
-            if line and len(line) <= 30 and not any(kw in line for kw in _SKIP_SUPPLIERS):
+            if line and len(line) <= 30 and not any(kw in line for kw in _SKIP_KEYWORDS):
                 if len(line) >= 2 and line not in suppliers:
                     suppliers.append(line)
         return suppliers
@@ -332,10 +335,11 @@ class RidePricingFSM:
         result = self.grounder.ground(shot, desc, screen_w=sw, screen_h=sh,
                                        ref_image=ref_path if Path(ref_path).exists() else None)
 
-        cx, cy = self._extract_center(result)
-        if cx is None:
+        center = self._extract_center(result)
+        if center is None:
             self._log(f"    ⚠ 未找到「{supplier}」的问号")
             return False
+        cx, cy = center
 
         self._log(f"    问号 at ({cx},{cy})")
         self._annotate_click(shot, f"q_{supplier}", result.get("bbox"), cx, cy)
