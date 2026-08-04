@@ -26,7 +26,7 @@ from collector.infrastructure.vision.vlm_grounder import VLMGrounder
 
 _REF_QUESTION_ICON = "assets/button_to_price.png"
 _SKIP_SUPPLIERS = {"出租车", "优享"}          # 精确匹配（兼容旧引用）
-_SKIP_KEYWORDS = ("的士", "出租", "优享")      # 关键词：出租车/的士/优享类一律不采集（CAP-08）
+_SKIP_KEYWORDS = ("快车", "拼车", "的士", "出租", "优享")      # 关键词：快车/拼车/出租车/的士/优享类一律不采集（CAP-08/09）
 # 详细计价页终点标记：出现蓝色「预约用车」即停止滚动（CAP-01）
 _END_MARKER = "预约用车"
 
@@ -158,13 +158,14 @@ class RidePricingFSM:
         return screenshots
 
     def _collect_suppliers(self, target_count: int, screenshots: list[str]) -> list[str]:
-        """逐个采集「全选经济」下的运力商（CAP-06）。
+        """逐个采集「经济型」栏下的运力商（CAP-06/09）。
 
         流程：
-          1. S2 识别当前打车页「全选经济」栏下的运力商列表；
+          1. S2 识别当前屏「经济型」栏（两道灰线之间）的运力商列表 + economy_ended；
           2. 逐个采集列表中未采集过的运力商（S3a 点问号 → S3c 详细计价页）；
           3. 列表最后一个采完且数量仍 < target_count → 下滑打车页查看新的运力商；
-          4. 达到 target_count（默认 10）或经济型已采完（下滑确认后仍无新运力商）→ 结束。
+          4. 终止：达到 target_count（默认 10），或经济型栏结束
+             （截图出现「特快车/特惠快车」「出租车」「优享型」，其下运力商不再采集）。
         """
         collected: list[str] = []
         attempted: set[str] = set()
@@ -172,17 +173,20 @@ class RidePricingFSM:
         max_rounds = self.collection_cfg.get("max_scroll_rounds", 8)
 
         while len(collected) < target_count and scroll_round < max_rounds:
-            # S2: 识别当前屏经济型供应商列表
-            candidates = self._s2_list_suppliers()
+            # S2: 识别当前屏经济型供应商列表 + 栏是否结束
+            candidates, economy_ended = self._s2_list_suppliers()
             new_suppliers = [s for s in candidates if s not in attempted]
 
             if not new_suppliers:
+                if economy_ended:
+                    self._log("  经济型栏已结束且无新运力商，停止")
+                    break
                 # 当前列表没有新运力商 → 下滑一屏确认是否还有
                 self._log("  当前屏无新运力商，下滑确认")
                 self._swipe_down("s4_nomore")
                 self._wait(self.collection_cfg.get("after_scroll_wait", 1.0), "after_scroll_wait")
                 scroll_round += 1
-                candidates = self._s2_list_suppliers()
+                candidates, economy_ended = self._s2_list_suppliers()
                 new_suppliers = [s for s in candidates if s not in attempted]
                 if not new_suppliers:
                     self._log("  经济型已采完，退出")
@@ -221,8 +225,12 @@ class RidePricingFSM:
                 self._log(f"  已达目标 {target_count} 个，停止")
                 break
 
+            if economy_ended:
+                self._log("  经济型栏已结束（出现特快车/出租车/优享型），其下不再采集，停止")
+                break
+
             # 列表最后一个已采完但仍不够 → 下滑打车页查看新的运力商
-            self._log("  ↓ 下滑 1/3 屏，查看新运力商")
+            self._log("  ↓ 下滑 1/6 屏，查看新运力商")
             self._swipe_down("s4_next")
             self._wait(self.collection_cfg.get("after_scroll_wait", 1.0), "after_scroll_wait")
             scroll_round += 1
@@ -278,47 +286,80 @@ class RidePricingFSM:
     # S2
     # ==================================================================
 
-    def _s2_list_suppliers(self) -> list[str]:
+    def _s2_list_suppliers(self) -> tuple[list[str], bool]:
+        """识别当前屏「经济型」栏下的运力商（CAP-09）。
+
+        返回 (suppliers, economy_ended)：
+          suppliers     经济型栏内（两道灰线之间）的运力商名称（已过滤快车/拼车/出租等）；
+          economy_ended 截图中是否出现「特快车/特惠快车」「出租车」「优享型」等非经济型栏。
+        """
         self._log("S2: 识别经济型供应商")
         shot = self._shot("s2_suppliers")
         desc = (
-            "高德打车页面。"
-            "以 JSON 数组列出「经济型」分组标题**下方**所有供应商名称。"
-            "只列经济型下面的行，且有「预估」和「?」问号的。"
-            "排除出租车/的士/出租/优享等非经济型运力商。"
-            '格式: ["快车", "特惠快车"] 无则 []。'
+            "高德打车页面用灰色分割线划分多个栏（如「经济型」「特快车/特惠快车」「出租车」「优享型」等）。"
+            "只列出「经济型」栏内（两道灰线之间）的运力商行，每行含车型名、预估价格和 ? 问号。"
+            "不要列出其他栏（特快车/特惠快车、快车、拼车、出租车、优享型）的行。"
+            '以 JSON 返回: {"suppliers": ["曹操出行", ...], "economy_ended": false}'
+            "economy_ended: 截图中出现「特快车/特惠快车」「出租车」「优享型」等非经济型栏"
+            "（即经济型栏已结束）时为 true，否则 false。"
         )
         self.stats["vlm_calls"] += 1
         result = self.grounder.query_text(shot, desc)
         raw = result.get("raw_response", "").strip()
         self._log(f"  VLM: {raw[:300]}")
 
+        suppliers, economy_ended = self._parse_s2_response(raw)
+        if economy_ended:
+            self._log(f"  经济型栏已结束（特快车/出租车/优享型出现），当前栏剩余 {len(suppliers)} 个")
+        return suppliers, economy_ended
+
+    @staticmethod
+    def _parse_s2_response(raw: str) -> tuple[list[str], bool]:
+        """解析 S2 VLM 响应 → (suppliers, economy_ended)（CAP-09）。
+
+        兼容两种格式：
+          {"suppliers": [...], "economy_ended": true/false}   # 新格式
+          ["快车", ...]                                       # 旧数组格式（economy_ended=False）
+        按 _SKIP_KEYWORDS 过滤；解析失败返回 ([], False)。
+        """
         suppliers: list[str] = []
+        economy_ended = False
+        cleaned = raw.strip()
+        for m in ("```json", "```"):
+            if cleaned.startswith(m):
+                cleaned = cleaned[len(m):].strip()
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3].strip()
+
         try:
-            cleaned = raw
-            for m in ("```json", "```"):
-                if cleaned.startswith(m):
-                    cleaned = cleaned[len(m):].strip()
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3].strip()
             parsed = json.loads(cleaned)
+            if isinstance(parsed, dict):
+                economy_ended = bool(parsed.get("economy_ended", False))
+                items = parsed.get("suppliers", [])
+                if not isinstance(items, list):
+                    return [], economy_ended
+                for n in items:
+                    n = str(n).strip()
+                    if n and not any(kw in n for kw in _SKIP_KEYWORDS) and n not in suppliers:
+                        suppliers.append(n)
+                return suppliers, economy_ended
             if isinstance(parsed, list):
                 for n in parsed:
                     n = str(n).strip()
-                    if n and not any(kw in n for kw in _SKIP_KEYWORDS):
-                        if n not in suppliers:
-                            suppliers.append(n)
-                return suppliers
+                    if n and not any(kw in n for kw in _SKIP_KEYWORDS) and n not in suppliers:
+                        suppliers.append(n)
+                return suppliers, False
         except (json.JSONDecodeError, ValueError):
             pass
 
-        for line in raw.split("\n"):
+        # 非 JSON：逐行兜底
+        for line in cleaned.split("\n"):
             line = re.sub(r'^[\d\.\、\)）\-\s]+', '', line.strip())
             line = line.strip().strip('"').strip("'").strip(",")
             if line and len(line) <= 30 and not any(kw in line for kw in _SKIP_KEYWORDS):
                 if len(line) >= 2 and line not in suppliers:
                     suppliers.append(line)
-        return suppliers
+        return suppliers, False
 
     # ==================================================================
     # S3a

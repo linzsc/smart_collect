@@ -65,16 +65,18 @@ def test_s2_parse_json_array():
 
 
 def test_s2_parse_excludes_taxi_and_youxiang():
-    """S2/CAP-08: 排除出租车/的士/出租/优享等非经济型运力商"""
-    raw = '["快车", "出租车", "北京的士", "北京新出租", "特惠快车", "优享", "拼车"]'
+    """S2/CAP-08/09: 排除快车/拼车/出租车/的士/优享等非目标运力商"""
+    raw = '["曹操出行", "快车", "出租车", "北京的士", "北京新出租", "特惠快车", "优享", "拼车", "阳光出行"]'
     from collector.platform.gaode.ride_pricing import _SKIP_KEYWORDS
 
     cleaned = raw.strip()
     parsed = json.loads(cleaned)
     suppliers = [n for n in parsed if not any(kw in n for kw in _SKIP_KEYWORDS)]
-    assert "快车" in suppliers
-    assert "特惠快车" in suppliers
-    assert "拼车" in suppliers
+    assert "曹操出行" in suppliers
+    assert "阳光出行" in suppliers
+    assert "快车" not in suppliers
+    assert "特惠快车" not in suppliers
+    assert "拼车" not in suppliers
     assert "出租车" not in suppliers
     assert "北京的士" not in suppliers
     assert "北京新出租" not in suppliers
@@ -349,7 +351,7 @@ def test_collect_suppliers_loop():
 
     # A) 3 个运力商、目标 10 → 全部采完，经济型采完退出
     fsm = _mkfsm()
-    fsm._s2_list_suppliers = MagicMock(side_effect=[["快车", "特惠快车", "拼车"], [], []])
+    fsm._s2_list_suppliers = MagicMock(side_effect=[(["快车", "特惠快车", "拼车"], False), ([], False), ([], False)])
     fsm._s3a_tap_question = MagicMock(return_value=True)
     collected = fsm._collect_suppliers(10, [])
     assert collected == ["快车", "特惠快车", "拼车"], collected
@@ -358,7 +360,7 @@ def test_collect_suppliers_loop():
 
     # B) 目标 2、列表给 3 个 → 采到 2 个即停（不采第 3 个、不滑动）
     fsm2 = _mkfsm()
-    fsm2._s2_list_suppliers = MagicMock(return_value=["快车", "特惠快车", "拼车"])
+    fsm2._s2_list_suppliers = MagicMock(return_value=(["快车", "特惠快车", "拼车"], False))
     fsm2._s3a_tap_question = MagicMock(return_value=True)
     collected2 = fsm2._collect_suppliers(2, [])
     assert collected2 == ["快车", "特惠快车"], collected2
@@ -367,7 +369,7 @@ def test_collect_suppliers_loop():
 
     # C) 找不到问号的运力商被跳过，其余照常采集
     fsm3 = _mkfsm()
-    fsm3._s2_list_suppliers = MagicMock(side_effect=[["快车", "特惠快车"], [], []])
+    fsm3._s2_list_suppliers = MagicMock(side_effect=[(["快车", "特惠快车"], False), ([], False), ([], False)])
     fsm3._s3a_tap_question = MagicMock(side_effect=[True, False])
     collected3 = fsm3._collect_suppliers(10, [])
     assert collected3 == ["快车"], collected3
@@ -375,11 +377,26 @@ def test_collect_suppliers_loop():
 
     # D) 详细计价采集失败（S3c 返回 False）→ 不计入 collected
     fsm4 = _mkfsm()
-    fsm4._s2_list_suppliers = MagicMock(side_effect=[["快车", "特惠快车"], [], []])
+    fsm4._s2_list_suppliers = MagicMock(side_effect=[(["快车", "特惠快车"], False), ([], False), ([], False)])
     fsm4._s3a_tap_question = MagicMock(return_value=True)
     fsm4._s3c_collect_detail_rules = MagicMock(side_effect=[True, False])
     collected4 = fsm4._collect_suppliers(10, [])
     assert collected4 == ["快车"], collected4  # 特惠快车 S3c 失败不计入
+
+    # E) economy_ended=True 且不足 10 → 采完当前列表后停止（不再下滑）
+    fsm5 = _mkfsm()
+    fsm5._s2_list_suppliers = MagicMock(return_value=(["快车", "特惠快车"], True))
+    fsm5._s3a_tap_question = MagicMock(return_value=True)
+    collected5 = fsm5._collect_suppliers(10, [])
+    assert collected5 == ["快车", "特惠快车"], collected5
+    assert fsm5._swipe_down.call_count == 0, fsm5._swipe_down.call_count
+
+    # F) economy_ended=True 且无新运力商 → 立即停止（不确认下滑）
+    fsm6 = _mkfsm()
+    fsm6._s2_list_suppliers = MagicMock(return_value=([], True))
+    collected6 = fsm6._collect_suppliers(10, [])
+    assert collected6 == [], collected6
+    assert fsm6._swipe_down.call_count == 0, fsm6._swipe_down.call_count
     return "PASS ✓"
 
 
@@ -497,6 +514,29 @@ def test_s3a_no_question_no_crash():
 
     assert fsm._s3a_tap_question("北京新出租") is False
     mock_adb.click.assert_not_called()
+    return "PASS ✓"
+
+
+
+def test_parse_s2_response():
+    """CAP-09: S2 响应解析 — 新 dict 格式(economy_ended) + 旧数组兼容 + 关键词过滤。"""
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    # 新格式：suppliers + economy_ended，快车被过滤
+    suppliers, ended = RidePricingFSM._parse_s2_response(
+        '{"suppliers": ["曹操出行", "快车", "阳光出行"], "economy_ended": true}'
+    )
+    assert suppliers == ["曹操出行", "阳光出行"], suppliers
+    assert ended is True
+
+    # 旧数组格式 → economy_ended=False，全被过滤
+    suppliers2, ended2 = RidePricingFSM._parse_s2_response('["快车", "特惠快车", "拼车"]')
+    assert suppliers2 == [], suppliers2
+    assert ended2 is False
+
+    # 空响应/非法 → ([], False)
+    suppliers3, ended3 = RidePricingFSM._parse_s2_response("")
+    assert suppliers3 == [] and ended3 is False
     return "PASS ✓"
 
 # ======================================================================
@@ -767,13 +807,13 @@ def _build_query_text_side_effect():
     """构建 query_text 的 side_effect.
 
     调用顺序:
-      S2-1: 识别供应商 → ["快车", "特惠快车"]
+      S2-1: 识别供应商 → {"suppliers": ["曹操出行", "阳光出行"], "economy_ended": false}
       S3c-工作日-scroll: 每次滑动后 LLM 判断「预约用车」→ NO, NO, NO, YES (i=0..3)
       S3c-休息日-scroll: 每次滑动后 LLM 判断「预约用车」→ NO, NO, YES (i=0..2)
       ... 重复 2 个供应商
     """
     SUPPLIERS_RESP = {
-        "raw_response": '["快车", "特惠快车"]',
+        "raw_response": '{"suppliers": ["曹操出行", "阳光出行"], "economy_ended": false}',
         "success": True,
     }
     NOT_MARKER = {"raw_response": "NO, 未出现预约用车", "success": True}
@@ -1293,6 +1333,7 @@ def main() -> None:
         ("PERF-02 返回确定性化",      test_tap_back_arrow_deterministic),
         ("PERF-03 标签坐标复用",      test_tab_coordinate_reuse),
         ("CAP-08 找不到问号不崩溃",   test_s3a_no_question_no_crash),
+        ("CAP-09 S2响应解析",         test_parse_s2_response),
     ]
     for label, fn in suite1:
         try:
