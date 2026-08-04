@@ -19,7 +19,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageChops, ImageDraw
 
 from collector.infrastructure.device.adb_utils import AdbTools
 from collector.infrastructure.vision.vlm_grounder import VLMGrounder
@@ -379,14 +379,14 @@ class RidePricingFSM:
             self.adb.click(cx, cy)
             self._wait(1.0, "tab_wait")
 
-        detected = self._scroll_to_bottom(tab_label, supplier)
+        reached_end = self._scroll_to_bottom(tab_label, supplier)
         self._sub_seq += 1
         self._sub_shot(f"{tab_label}_bottom_{supplier}")
 
-        # CAP-01: 检测到「预约用车」→ 回顶后继续后续流程（切换下一标签）。
-        # 未检测到（达到滑动上限）也回顶：保证顶部标签栏可见，可正常切换。
+        # CAP-01/CAP-05: 到达终点（出现「预约用车」或页面不再变化）→ 回顶后继续后续流程。
+        # 未到达（达到滑动上限）也回顶：保证顶部标签栏可见，可正常切换。
         if tab_label == "工作日":
-            state = "检测到「预约用车」" if detected else "未检测到「预约用车」(达上限兜底)"
+            state = "到达终点（预约用车/页面无变化）" if reached_end else "未到达终点(达上限兜底)"
             self._log(f"      {tab_label}: {state} → 回顶")
             self._scroll_to_top(tab_label, supplier)
 
@@ -423,17 +423,18 @@ class RidePricingFSM:
         self.adb.slide(cx, y1, cx, y2, self.collection_cfg.get("scroll_duration_ms", 500))
 
     def _scroll_to_bottom(self, tab: str, supplier: str) -> bool:
-        """每次滑动后调用 LLM 判断是否出现「预约用车」（详情页终点，CAP-01）。
+        """每次滑动后判断退出条件：出现「预约用车」**或**页面不再变化（CAP-05）。
 
         每轮：截图+标注 → 下滑 1/3 屏 → 等待稳定 → 再截图 →
-        LLM 判断是否出现蓝色「预约用车」→ 出现即返回 True / 未出现继续。
-        循环有上限 max_swipes，防止无限滑动；达上限仍未检测到返回 False。
+        - LLM 判断是否出现蓝色「预约用车」→ 出现即停止；
+        - 或本地像素比对：本次滑动前后页面基本无变化（已到底）→ 停止（防止 LLM 漏检）。
+        循环有上限 max_swipes（collection.max_detail_swipes 可配）；达上限返回 False。
         """
         sw, sh = self._screen_size
         amount = sh // 3
         y1 = sh * 3 // 4
         y2 = y1 - amount
-        max_swipes = 12
+        max_swipes = int(self.collection_cfg.get("max_detail_swipes", 12))
 
         for i in range(max_swipes):
             shot = self._shot(f"{tab}_scroll_{i}_{supplier}")
@@ -441,15 +442,50 @@ class RidePricingFSM:
             self.adb.slide(sw // 2, y1, sw // 2, y2, 300)
             self._wait(0.5, "short_wait")
 
-            # 每次滑动后都调用 LLM 判断「预约用车」是否出现（CAP-01）
             check = self._shot(f"{tab}_check_{i}_{supplier}")
+            # 退出条件1：出现「预约用车」（LLM）
             if self._detect_end_marker(check):
                 self._log(f"      {tab}[{i}]: 出现「{_END_MARKER}」→ 到达终点，停止")
                 return True
-            self._log(f"      {tab}[{i}]: 未出现「{_END_MARKER}」→ 继续下滑")
+            # 退出条件2：页面不再变化（本次滑动前后基本一致 → 已到底）
+            if self._page_unchanged(shot, check):
+                self._log(f"      {tab}[{i}]: 页面无变化 → 到达终点，停止")
+                return True
+            self._log(f"      {tab}[{i}]: 未出现「{_END_MARKER}」且页面仍在变化 → 继续下滑")
 
-        self._log(f"      {tab}: 滑动 {max_swipes} 次仍未出现「{_END_MARKER}」，按上限退出")
+        self._log(f"      {tab}: 滑动 {max_swipes} 次仍未满足退出条件，按上限退出")
         return False
+
+    def _page_unchanged(
+        self,
+        prev_path: str,
+        curr_path: str,
+        max_changed_ratio: float = 0.02,
+        pixel_threshold: int = 12,
+    ) -> bool:
+        """本地像素比对：两张截图内容是否基本未变化（用于判定详情页已到底）。
+
+        缩放为小尺寸灰度图并裁掉顶部状态栏后，统计差异像素占比；
+        占比 < max_changed_ratio 视为页面未变化。文件缺失/读取失败返回 False（视为有变化）。
+        """
+        try:
+            a = Image.open(prev_path).convert("L")
+            b = Image.open(curr_path).convert("L")
+            w = 80
+            h = max(1, int(w * a.height / a.width))
+            a = a.resize((w, h), Image.LANCZOS)
+            b = b.resize((w, h), Image.LANCZOS)
+            crop_top = int(h * 0.08)  # 裁掉顶部状态栏（时钟等）
+            a = a.crop((0, crop_top, w, h))
+            b = b.crop((0, crop_top, w, h))
+            diff = ImageChops.difference(a, b)
+            hist = diff.histogram()
+            changed = sum(hist[pixel_threshold:])
+            ratio = changed / (a.width * a.height)
+            return ratio < max_changed_ratio
+        except Exception as e:
+            self._log(f"      ⚠ 页面比对失败（按有变化处理）: {e}")
+            return False
 
     def _detect_end_marker(self, image_path: str) -> bool:
         """调用 LLM 判断详细计价页截图是否已出现蓝色「预约用车」。

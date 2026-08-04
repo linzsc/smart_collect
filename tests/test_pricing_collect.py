@@ -245,6 +245,80 @@ def test_screenshot_organizer():
     return "PASS ✓"
 
 
+
+
+def test_page_unchanged():
+    """CAP-05: _page_unchanged 本地像素比对 — 相同页面 True，不同页面 False，缺文件 False."""
+    import tempfile
+
+    from PIL import Image
+
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        fsm = RidePricingFSM(adb=MagicMock(), grounder=MagicMock(), supplier="x",
+                             profile_cfg={}, output_dir=str(tmp / "out"), verbose=False)
+        a = tmp / "a.jpg"
+        b = tmp / "b.jpg"
+        c = tmp / "c.jpg"
+        Image.new("RGB", (200, 400), (200, 200, 200)).save(a)
+        Image.new("RGB", (200, 400), (200, 200, 200)).save(b)  # 与 a 完全相同
+        Image.new("RGB", (200, 400), (0, 0, 0)).save(c)         # 与 a 完全不同
+
+        assert fsm._page_unchanged(str(a), str(b)) is True
+        assert fsm._page_unchanged(str(a), str(c)) is False
+        assert fsm._page_unchanged(str(a), str(tmp / "missing.jpg")) is False
+    return "PASS ✓"
+
+
+def test_scroll_to_bottom_marker_or_stable():
+    """CAP-05: 退出条件 = 出现「预约用车」**或**页面不再变化。
+
+    1) 出现标记即停（页面比对不再需要）;
+    2) 未出现标记但页面无变化 → 停止;
+    3) 两者都未满足 → 达上限返回 False。
+    """
+    import tempfile
+
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    def _mkfsm(max_swipes):
+        mock_adb = MagicMock()
+        type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
+        fsm = RidePricingFSM(
+            adb=mock_adb, grounder=MagicMock(), supplier="x",
+            profile_cfg={"collection": {"max_detail_swipes": max_swipes}},
+            output_dir=str(Path(tempfile.gettempdir()) / "cap05_out"),
+            verbose=False,
+        )
+        fsm._shot = MagicMock(side_effect=lambda name: f"/fake/{name}.jpg")
+        return fsm
+
+    # 1) 出现「预约用车」→ 停止（标记命中时不再做页面比对）
+    fsm1 = _mkfsm(12)
+    fsm1._detect_end_marker = MagicMock(side_effect=[False, True])
+    fsm1._page_unchanged = MagicMock(return_value=False)
+    assert fsm1._scroll_to_bottom("工作日", "飞嘀打车") is True
+    assert fsm1._detect_end_marker.call_count == 2, fsm1._detect_end_marker.call_count
+    assert fsm1._page_unchanged.call_count == 1, fsm1._page_unchanged.call_count  # 仅 i=0
+
+    # 2) 未出现标记但页面无变化 → 停止
+    fsm2 = _mkfsm(12)
+    fsm2._detect_end_marker = MagicMock(return_value=False)
+    fsm2._page_unchanged = MagicMock(side_effect=[False, True])
+    assert fsm2._scroll_to_bottom("休息日", "旗妙出行") is True
+    assert fsm2._page_unchanged.call_count == 2, fsm2._page_unchanged.call_count
+
+    # 3) 两者都未满足 → 达上限返回 False
+    fsm3 = _mkfsm(2)
+    fsm3._detect_end_marker = MagicMock(return_value=False)
+    fsm3._page_unchanged = MagicMock(return_value=False)
+    assert fsm3._scroll_to_bottom("工作日", "飞嘀打车") is False
+    assert fsm3._detect_end_marker.call_count == 2, fsm3._detect_end_marker.call_count
+    assert fsm3._page_unchanged.call_count == 2, fsm3._page_unchanged.call_count
+    return "PASS ✓"
+
 # ======================================================================
 # Suite 2: FSM 完整流程 Mock 测试
 # ======================================================================
@@ -260,8 +334,8 @@ def test_fsm_full_flow():
       3. S2: query_text(识别供应商) → ["快车", "特惠快车"]
       4. S3a[快车]: ground(点问号, ref=button_to_price.png) → click
       5. S3c[快车]: ground(查看详细计价规则) → click
-         → ground(工作日tab) → click → 每次滑动后 query_text(预约用车?) → 出现即停 → slide×3(回顶)
-         → ground(休息日tab) → click → 每次滑动后 query_text(预约用车?) → 出现即停
+         → ground(工作日tab) → click → 每次滑动后 query_text(预约用车?) → 出现或页面无变化即停 → slide×3(回顶)
+         → ground(休息日tab) → click → 每次滑动后 query_text(预约用车?) → 出现或页面无变化即停
          → ground(返回箭头) → click → ground(返回箭头) → click
       6. S3a[特惠快车]: 同上
       7. S3c[特惠快车]: 同上
@@ -299,17 +373,19 @@ def test_fsm_full_flow():
                return_value=_checked_target) as mock_ensure:
         with patch('collector.platform.gaode.ride_pricing.AdbTools', return_value=mock_adb):
             with patch('collector.platform.gaode.ride_pricing.VLMGrounder', return_value=mock_grounder):
-                # Patch the module-level adb/grounder in ride_pricing
-                fsm = RidePricingFSM(
-                    adb=mock_adb,
-                    grounder=mock_grounder,
-                    supplier="经济型",
-                    profile_cfg=profile_cfg,
-                    output_dir="/tmp/test_output",
-                    verbose=False,
-                )
-                results = fsm.run()
-                fsms.append(fsm)
+                # CAP-05: 页面无变化判定在 Mock 中固定 False，退出由「预约用车」标记驱动
+                with patch.object(RidePricingFSM, "_page_unchanged", return_value=False) as mock_pu:
+                    # Patch the module-level adb/grounder in ride_pricing
+                    fsm = RidePricingFSM(
+                        adb=mock_adb,
+                        grounder=mock_grounder,
+                        supplier="经济型",
+                        profile_cfg=profile_cfg,
+                        output_dir="/tmp/test_output",
+                        verbose=False,
+                    )
+                    results = fsm.run()
+                    fsms.append(fsm)
 
     assert mock_ensure.called, "S1 应调用 ensure_all_selected"
 
@@ -344,8 +420,8 @@ def test_fsm_full_flow():
     assert len(marker_calls) == 14, \
         f"应有 2 供应商 × 7 次「预约用车」检测, 实际 {len(marker_calls)}"
 
-    # 4c. CAP-01: 出现「预约用车」即终止滚动 → 滑动次数可精确预期
-    #     S0(1) + 2 × (工作日 4 + 回顶 3 + 休息日 3) = 21
+    # 4c. CAP-01/CAP-05: 出现「预约用车」（或页面无变化）即终止滚动 → 滑动次数可精确预期
+    #     mock 中页面无变化=False, 由标记驱动: S0(1) + 2 × (工作日 4 + 回顶 3 + 休息日 3) = 21
     assert len(slide_calls) == 21, \
         f"「预约用车」出现应终止滚动, 预期 21 次滑动, 实际 {len(slide_calls)}"
 
@@ -358,6 +434,12 @@ def test_fsm_full_flow():
     print(f"  [Mock FSM] 检测到后回顶上滑: {len(up_swipes)} 次")
     assert len(up_swipes) == 6, \
         f"检测到「预约用车」后应回顶 2×3=6 次上滑, 实际 {len(up_swipes)}"
+
+    # 4e. CAP-05: 每次未命中标记时评估「页面无变化」（OR 退出条件）
+    #     工作日 i=0..2 共3次 + 休息日 i=0..1 共2次 = 5 次/供应商 → 10 次
+    print(f"  [Mock FSM] 页面无变化比对: {mock_pu.call_count} 次")
+    assert mock_pu.call_count == 10, \
+        f"未命中标记时应评估页面无变化, 预期 10 次, 实际 {mock_pu.call_count}"
 
     # 5. S3a 问号: ground 中应有 ref_image=button_to_price.png
     question_calls = [
@@ -403,6 +485,7 @@ def _build_profile_cfg() -> dict:
             "after_scroll_wait": 1.0,
             "swipe_duration_ms": 400,
             "max_suppliers": 2,
+            "max_detail_swipes": 12,
             "max_scroll_rounds": 15,
             "pricing_page_wait": 0.5,
         },
@@ -1014,6 +1097,8 @@ def main() -> None:
         ("_extract_center None",      test_extract_center_none),
         ("CAP-01 预约用车检测解析",   test_detect_end_marker),
         ("RES-01 结果整理聚合",      test_screenshot_organizer),
+        ("CAP-05 页面无变化判定",     test_page_unchanged),
+        ("CAP-05 标记或稳定退出",     test_scroll_to_bottom_marker_or_stable),
     ]
     for label, fn in suite1:
         try:

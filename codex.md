@@ -63,7 +63,7 @@ LLM、VLM 和 Agent 不能自行宣布成功。无法证明状态正确时必须
 - 同一张候选图同时用于终点检测、位移计算和关键帧选择。
 - Probe Frame 可以临时保存；Keyframe 才进入识别链路。
 - 默认用本地 OCR 检测“预约用车”，VLM 只做兜底。
-- （CAP-01 当前实现：按用户要求，进入详细计价页后每次滑动都调用 LLM 判断是否出现“预约用车”，检测到即停止滚动并回顶后继续；本地 OCR 留待 CAP-02+ 优化。）
+- （CAP-01/CAP-05 当前实现：按用户要求，进入详细计价页后每次滑动都调用 LLM 判断是否出现“预约用车”，出现“预约用车”**或**页面不再变化即停止滚动并回顶后继续；本地 OCR 留待 CAP-02+ 优化。）
 - 无法证明内容连续时停止，不得静默跳过内容。
 
 ## 3. 目标结构
@@ -189,6 +189,7 @@ collector/
 | CAP-02 | 测量页面实际滚动位移 | `TODO` | 输出位移、重叠比例和置信度；离线测试通过 |
 | CAP-03 | 自适应滑动控制 | `TODO` | 根据实测位移调整手势，循环有上限 |
 | CAP-04 | Probe/Keyframe与Manifest | `TODO` | 最少关键帧覆盖完整内容，产物可追踪 |
+| CAP-05 | 详情页退出条件：预约用车或页面无变化 | `DONE` | 出现“预约用车”**或**页面不再变化即停止滚动（本地像素比对）；离线测试通过 |
 | VER-01 | 关键页面StateVerifier | `TODO` | 关键动作均有明确后置验证 |
 | INT-01 | 接入现有线上识别服务 | `TODO` | 支持超时、重试、幂等和原始响应保存 |
 | QC-01 | 测试集、Ground Truth与数据Diff | `TODO` | 可区分采集缺失、识别错误、重复和合并错误 |
@@ -258,6 +259,7 @@ python -m compileall collector tests
 | 2026-08-04 | SEL-01 | `DONE` | ensure_all_selected 目标锚定幂等全选：domain/checkbox + infra/vision/checkbox + gaode/select_all(含离线定位启发式) + select_all 平台步骤(v3) + 删 NL 兜底；素材100次成功率700/700 | compileall + test_double_check + test_pricing_collect + test_select_all 通过 |
 | 2026-08-04 | RUN-01 | `DONE` | 真机 v2 debug 全流程跑通（起终点→计价采集2家）；S1 全选经济目标锚定：未勾选→点击→已勾选；耗时 250.4s（API 58.3s/等待52.2s） | 真机日志（run_real_test.txt） |
 | 2026-08-04 | CAP-01 | `DONE` | 详细计价页每次滑动后调用LLM判断蓝色“预约用车”：检测到即停止滚动并回顶后继续（工作日回顶→休息日，休息日采完退出）；_detect_end_marker 独立方法并计入 vlm_calls；_scroll_to_bottom 返回检测结果 | compileall + test_double_check + test_pricing_collect（Suite1 检测解析 / Suite2 每次滑动检测·终止滚动·回顶）通过；真实素材 VLM 验证：工作日第4张/休息日第3张检测到「预约用车」，流程可完成 |
+| 2026-08-04 | CAP-05 | `DONE` | 详情页退出条件改为“预约用车”**或**页面不再变化：新增 _page_unchanged 本地像素比对（缩放灰度+裁状态栏+阈值）；每次滑动后未命中标记即评估页面是否无变化；max_detail_swipes 可配 | test_pricing_collect（CAP-05 页面比对/标记或稳定退出 + FSM 全流程）通过 |
 | 2026-08-04 | DOC-03 | `DONE` | codex.md/CLAUDE.md 增加 §4.4：禁止主动 commit/push，仅用户显式「push」时提交推送 | 文档检查 |
 | 2026-08-04 | RES-01 | `DONE` | 新增 screenshot_organizer：必要截图=打车页(select_all_after)+每(标签×运力商)scroll_0..3；聚合 result/工作日|休息日/{冒泡页,<运力商>}/，打车页入冒泡页（每大文件夹1次共2次）；handle_pricing_collect 结束后调用；output 缺失/为空安全跳过；result/ 加入 .gitignore | test_pricing_collect（含 RES-01 聚合测试）通过；真实 output/ 验证 18 张/冒泡页×2+4组结构正确 |
 | 2026-08-04 | PERF-01 | `TODO` | 耗时优化 P2：debug 模式非准确耗时；API/等待/设备+编码三块归因，待优化 | 250.4s 真机日志归因 |
