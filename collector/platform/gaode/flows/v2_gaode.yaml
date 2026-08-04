@@ -29,16 +29,12 @@ steps:
     fallback:
       prompt: "页面底部区域（大约屏幕下方1/6）中查找'打车'两个字"
 
-  # ── 2. 填写上车点 → 搜索 → 选第一个候选 ──
+  # ── 2. 填写上车点 → 选第一个候选（无需搜索按钮）──
   - id: "set_pickup"
     type: "input_text"
-    description: "输入上车地点，点击搜索按钮"
+    description: "输入上车地点（不点击搜索按钮，候选自动出现）"
     value: "{{.Pickup}}"
-    confirm: "key_search"
-    confirm_ground:
-      element_desc: "搜索输入框右侧的蓝色「搜索」按钮或放大镜图标"
-      retry_alt_descs:
-        - "输入框旁边的搜索按钮"
+    confirm: "none"
     ground:
       element_desc: "打车页面中上部的上车点输入框/显示区域，通常显示当前位置或「你在哪」文字"
       retry_alt_descs:
@@ -53,16 +49,12 @@ steps:
       retry_alt_descs:
         - "搜索结果中排在第一行的上车点条目"
 
-  # ── 3. 填写目的地 → 搜索 → 选第一个候选 ──
+  # ── 3. 填写目的地 → 选第一个候选（无需搜索按钮）──
   - id: "set_dropoff"
     type: "input_text"
-    description: "点击目的地输入框，输入目的地，点击搜索按钮"
+    description: "输入目的地（不点击搜索按钮，候选自动出现）"
     value: "{{.Address}}"
-    confirm: "key_search"
-    confirm_ground:
-      element_desc: "搜索输入框右侧的蓝色「搜索」按钮或放大镜图标"
-      retry_alt_descs:
-        - "输入框旁边的搜索按钮"
+    confirm: "none"
     ground:
       element_desc: "打车页面中上车点下方的「你要去哪儿」或「输入目的地」输入框，灰色提示文字"
       retry_alt_descs:

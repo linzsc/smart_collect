@@ -112,9 +112,15 @@ def handle_s2_list_suppliers(engine, step: dict) -> None:
 
 
 def handle_pricing_loop_done(engine, step: dict) -> bool:
-    """loop_until: 经济型栏结束或本轮无新运力商则终止。"""
+    """loop_until: 当前屏无新的未采集运力商则终止。"""
     from collector.platform.gaode.supplier_list import handle_pricing_loop_done as _impl
     return _impl(engine, step)
+
+
+def handle_mark_supplier_processed(engine, step: dict) -> None:
+    """采集完成后标记当前运力商为已处理（防重复采集）。"""
+    from collector.platform.gaode.supplier_list import handle_mark_supplier_processed as _impl
+    _impl(engine, step)
 
 
 # ---------------------------------------------------------------------------
@@ -135,5 +141,6 @@ def build_platform() -> Platform:
             "pricing_result_organize": handle_pricing_result_organize,
             "s2_list_suppliers": handle_s2_list_suppliers,
             "pricing_loop_done": handle_pricing_loop_done,
+            "mark_supplier_processed": handle_mark_supplier_processed,
         },
     )

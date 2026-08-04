@@ -518,6 +518,224 @@ steps:
 
 
 # ======================================================================
+# Suite 10: scroll 手势参数（from_y / to_y）
+# ======================================================================
+
+def test_scroll_from_to_y_fractions():
+    """scroll 步骤支持 from_y/to_y（屏高比例），计价页 S0 用 2/3→1/4 强滑。"""
+    yaml_text = """
+name: t
+steps:
+  - id: "s0"
+    type: "scroll"
+    direction: "up"
+    from_y: 0.66
+    to_y: 0.25
+    duration_ms: 400
+"""
+    e = _make_engine(yaml_text)
+    try:
+        with patch("time.sleep"):
+            e.run()
+        e.adb.slide.assert_called_once()
+        args = e.adb.slide.call_args.args
+        # screen 1080x2400：y1=int(0.66*2400)=1584，y2=int(0.25*2400)=600
+        assert args[1] == int(0.66 * 2400), args
+        assert args[3] == int(0.25 * 2400), args
+        assert args[0] == 540 and args[2] == 540, args
+    finally:
+        _cleanup(e)
+    return "PASS ✓"
+
+
+# ======================================================================
+# Suite 11: debug 模式每步截图
+# ======================================================================
+
+def test_scroll_debug_captures_before_after():
+    """debug 模式：scroll 步骤滑动前后各截图（如 S0 上滑可追溯）；collect 模式不截图。"""
+    import tempfile as _tf
+
+    yaml_text = """
+name: t
+steps:
+  - id: "s0_scroll_up"
+    type: "scroll"
+    direction: "up"
+    duration_ms: 0
+"""
+
+    # debug：前后各一张
+    with _tf.TemporaryDirectory() as tmp:
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_text)
+            tmp_flow = f.name
+        try:
+            e = FlowEngine(adb=_MockAdbFixed(), grounder=MagicMock(), flow_path=tmp_flow,
+                           output_dir=str(Path(tmp) / "out"), verbose=False, mode="debug")
+            with patch("time.sleep"):
+                e.run()
+            shots = [p_.name for p_ in (Path(tmp) / "out" / "screenshots").glob("*.jpg")]
+            assert any("s0_scroll_up_before.jpg" in n for n in shots), shots
+            assert any("s0_scroll_up_after.jpg" in n for n in shots), shots
+        finally:
+            Path(tmp_flow).unlink(missing_ok=True)
+
+    # collect：不额外截图
+    with _tf.TemporaryDirectory() as tmp:
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_text)
+            tmp_flow = f.name
+        try:
+            e = FlowEngine(adb=_MockAdbFixed(), grounder=MagicMock(), flow_path=tmp_flow,
+                           output_dir=str(Path(tmp) / "out2"), verbose=False, mode="collect")
+            with patch("time.sleep"):
+                e.run()
+            shots_dir = Path(tmp) / "out2" / "screenshots"
+            assert not shots_dir.exists() or list(shots_dir.glob("*.jpg")) == [],                 "collect 模式 scroll 不应落盘截图"
+        finally:
+            Path(tmp_flow).unlink(missing_ok=True)
+    return "PASS ✓"
+
+
+def test_back_debug_captures_before():
+    """debug 模式：back 步骤返回前截图。"""
+    import tempfile as _tf
+
+    yaml_text = """
+name: t
+steps:
+  - id: "exit_detail"
+    type: "back"
+    wait_after: 0
+"""
+    with _tf.TemporaryDirectory() as tmp:
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_text)
+            tmp_flow = f.name
+        try:
+            e = FlowEngine(adb=_MockAdbFixed(), grounder=MagicMock(), flow_path=tmp_flow,
+                           output_dir=str(Path(tmp) / "out"), verbose=False, mode="debug")
+            with patch("time.sleep"):
+                e.run()
+            shots = [p_.name for p_ in (Path(tmp) / "out" / "screenshots").glob("*.jpg")]
+            assert any("exit_detail_before.jpg" in n for n in shots), shots
+        finally:
+            Path(tmp_flow).unlink(missing_ok=True)
+    return "PASS ✓"
+
+
+# ======================================================================
+# Suite 12: scroll 条件执行（if_state）
+# ======================================================================
+
+def test_scroll_if_state_conditional():
+    """scroll 支持 if_state：条件不满足则跳过滑动（s4_next 仅无新供应商时下滑）。"""
+    yaml_text = """
+name: t
+steps:
+  - id: "s4_next"
+    type: "scroll"
+    direction: "up"
+    duration_ms: 0
+    if_state:
+      round_had_suppliers: false
+      economy_ended: false
+"""
+    # 条件不满足（有未采集供应商）→ 跳过滑动
+    e = _make_engine(yaml_text)
+    try:
+        with patch("time.sleep"):
+            e.state["round_had_suppliers"] = True
+            e.state["economy_ended"] = False
+            e.run()
+            e.adb.slide.assert_not_called()
+    finally:
+        _cleanup(e)
+
+    # 条件满足（无未采集、经济型未结束）→ 滑动
+    e2 = _make_engine(yaml_text)
+    try:
+        with patch("time.sleep"):
+            e2.state["round_had_suppliers"] = False
+            e2.state["economy_ended"] = False
+            e2.run()
+            e2.adb.slide.assert_called_once()
+            args = e2.adb.slide.call_args.args
+            assert args[3] == int(0.25 * 2400), args   # 最多 1/4 屏
+    finally:
+        _cleanup(e2)
+
+    # 经济型已结束（无未采集）→ 不滑（避免无谓下滑）
+    e3 = _make_engine(yaml_text)
+    try:
+        with patch("time.sleep"):
+            e3.state["round_had_suppliers"] = False
+            e3.state["economy_ended"] = True
+            e3.run()
+            e3.adb.slide.assert_not_called()
+    finally:
+        _cleanup(e3)
+    return "PASS ✓"
+
+
+# ======================================================================
+# Suite 9: input_text 确认模式
+# ======================================================================
+
+def test_input_text_confirm_none_skips_search_button():
+    """confirm: none → 输入后不点击搜索按钮、不回车，只等待（主场景）。"""
+    yaml_text = """
+name: t
+steps:
+  - id: "inp"
+    type: "input_text"
+    description: "输入目的地"
+    value: "北京西站"
+    confirm: "none"
+    ground:
+      element_desc: "输入框"
+"""
+    e = _make_engine(yaml_text)
+    try:
+        with patch("time.sleep"):
+            e.run()
+        # 不回车；ground 只定位输入框 1 次，无搜索按钮/确认按钮 ground
+        e.adb.key_enter.assert_not_called()
+        assert e.grounder.ground.call_count == 1, e.grounder.ground.call_count
+        e.adb.type.assert_called_once_with("北京西站")
+    finally:
+        _cleanup(e)
+    return "PASS ✓"
+
+
+def test_input_text_confirm_key_search_clicks_button():
+    """confirm: key_search → 输入后点击搜索按钮（对照用例，确保 none 生效）。"""
+    yaml_text = """
+name: t
+steps:
+  - id: "inp"
+    type: "input_text"
+    description: "输入目的地"
+    value: "北京西站"
+    confirm: "key_search"
+    confirm_ground:
+      element_desc: "搜索按钮"
+    ground:
+      element_desc: "输入框"
+"""
+    e = _make_engine(yaml_text)
+    try:
+        with patch("time.sleep"):
+            e.run()
+        # 输入框 + 搜索按钮 各 ground 一次
+        assert e.grounder.ground.call_count == 2, e.grounder.ground.call_count
+    finally:
+        _cleanup(e)
+    return "PASS ✓"
+
+
+# ======================================================================
 # Runner
 # ======================================================================
 
@@ -557,6 +775,20 @@ def main() -> None:
         ("Suite 7: scroll_until_visible 增强", [
             ("frame_suffix + stop_on_stable", test_scroll_until_visible_frame_suffix_and_stable),
             ("scroll_back_to_top", test_scroll_until_visible_back_to_top),
+        ]),
+        ("Suite 9: input_text 确认模式", [
+            ("confirm:none 跳过搜索按钮", test_input_text_confirm_none_skips_search_button),
+            ("confirm:key_search 仍点击按钮", test_input_text_confirm_key_search_clicks_button),
+        ]),
+        ("Suite 10: scroll 手势参数", [
+            ("from_y/to_y 屏高比例", test_scroll_from_to_y_fractions),
+        ]),
+        ("Suite 11: debug 每步截图", [
+            ("scroll 前后截图（debug）/collect 不截", test_scroll_debug_captures_before_after),
+            ("back 返回前截图", test_back_debug_captures_before),
+        ]),
+        ("Suite 12: scroll 条件执行", [
+            ("if_state 跳过/执行/经济型结束不滑", test_scroll_if_state_conditional),
         ]),
     ]
 

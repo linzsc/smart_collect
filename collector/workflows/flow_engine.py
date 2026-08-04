@@ -228,6 +228,8 @@ class FlowEngine:
         pkg = step.get("package", self.package)
         self.adb.open_app(pkg)
         self._wait(self.timing.get("app_launch_wait", 3.0), "app_launch_wait")
+        if self.debug_mode:
+            self._screenshot(f"{step.get('id', 'open_app')}_after")
 
     def _do_ground_click(self, step: dict) -> None:
         # ── 坐标缓存（PERF-03 语义）：cache_key 命中直接点击，不调 VLM/不截图 ──
@@ -468,6 +470,10 @@ class FlowEngine:
             self._log("  ↗ 回车确认")
             self.adb.key_enter()
 
+        elif confirm_method == "none":
+            # 输入后无需确认：不点击搜索按钮、不回车（候选列表自动出现，主场景）
+            self._log("  ↻ 输入后无需确认（跳过搜索按钮/回车）")
+
         elif confirm_method == "tap_element":
             confirm_cfg = step.get("confirm_ground", {})
             confirm_desc = confirm_cfg.get("element_desc", "确认按钮")
@@ -482,21 +488,43 @@ class FlowEngine:
         self._wait(self.timing.get("after_confirm_wait", 3.0), "after_confirm_wait")
 
     def _do_scroll(self, step: dict) -> None:
+        # 条件滚动：if_state 全部匹配才执行（如仅当当前屏无新供应商时下滑找更多）
+        if_state = step.get("if_state")
+        if if_state and not all(self.state.get(k) == v for k, v in if_state.items()):
+            self._log(f"  ↷ 条件不满足，跳过滑动: {self._render(step.get('id', 'scroll'))}")
+            return
+
         direction = step.get("direction", "up")
         repeat = step.get("repeat", 1)
         sw, sh = self._screen_size
         duration = step.get("duration_ms", 400)
+        # 可选手势参数 from_y / to_y（0~1 屏高比例），覆盖默认手势。
+        # 计价页 S0 上滑用 2/3→1/4 屏（与 FSM 一致），保证实际滚动生效。
+        fy, ty = step.get("from_y"), step.get("to_y")
+
+        def _y(default_expr: int) -> int:
+            return int(float(fy) * sh) if fy is not None else default_expr
+
+        step_id = self._render(step.get("id", "scroll"))
+        if self.debug_mode:
+            self._screenshot(f"{step_id}_before")   # 滑动前
 
         for i in range(repeat):
             if direction == "up":
-                self.adb.slide(sw // 2, sh // 2, sw // 2, sh // 4, duration)
+                self.adb.slide(sw // 2, _y(sh // 2), sw // 2,
+                               int(float(ty) * sh) if ty is not None else sh // 4, duration)
             elif direction == "down":
-                self.adb.slide(sw // 2, sh // 3, sw // 2, sh * 2 // 3, duration)
+                self.adb.slide(sw // 2, _y(sh // 3), sw // 2,
+                               int(float(ty) * sh) if ty is not None else sh * 2 // 3, duration)
             elif direction == "half_down":
-                self.adb.slide(sw // 2, sh * 2 // 3, sw // 2, sh * 2 // 3 - sh // 2, duration)
+                self.adb.slide(sw // 2, _y(sh * 2 // 3), sw // 2,
+                               int(float(ty) * sh) if ty is not None else sh * 2 // 3 - sh // 2,
+                               duration)
 
             self._wait(step.get("after_wait", 1.0), "after_scroll")
 
+        if self.debug_mode:
+            self._screenshot(f"{step_id}_after")    # 滑动后（查看滚动效果）
         self._log(f"  ↕ 滑动: {direction} ×{repeat}")
 
     def _do_wait(self, step: dict) -> None:
@@ -513,6 +541,9 @@ class FlowEngine:
 
     def _do_back(self, step: dict) -> None:
         """确定性返回：adb.back() + 可配置等待（PERF-02 方案一）。"""
+        step_id = self._render(step.get("id", "back"))
+        if self.debug_mode:
+            self._screenshot(f"{step_id}_before")   # 记录返回前现场
         self.adb.back()
         self._wait(float(step.get("wait_after", 1.0)), "back_wait")
 
@@ -669,6 +700,8 @@ class FlowEngine:
 
         校验失败抛 StepFailed（可被 optional 跳过）。
         """
+        if self.debug_mode:
+            self._screenshot(f"{self._render(step.get('id', 'verify'))}_before")
         expect = step.get("expect_state")
         if expect:
             for k, v in expect.items():

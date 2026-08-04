@@ -232,14 +232,52 @@ def test_screenshot_organizer():
 
 
 # ======================================================================
+# Suite 1b: 循环终止条件（ARCH-17）
+# ======================================================================
+
+def test_pricing_loop_done_termination():
+    """终止 = 采满 10 个，或经济型栏（出租车/特快车/优享型之上）采完。"""
+    from unittest.mock import MagicMock as _MM
+
+    from collector.platform.gaode.supplier_list import handle_pricing_loop_done
+
+    engine = _MM()
+    engine.profile_cfg = {"collection": {"max_suppliers": 10}}
+    engine._log = lambda *a, **k: None
+
+    # 未满 10 且有新供应商 → 继续
+    engine.state = {"_processed": {"A"}, "round_had_suppliers": True, "economy_ended": False}
+    assert handle_pricing_loop_done(engine, {}) is False
+
+    # 采满 10 个 → 停止
+    engine.state = {"_processed": {f"s{i}" for i in range(10)},
+                    "round_had_suppliers": True, "economy_ended": False}
+    assert handle_pricing_loop_done(engine, {}) is True
+
+    # 经济型栏已结束（出租车/特快车/优享型出现）且其上采完 → 停止
+    engine.state = {"_processed": {"A"}, "round_had_suppliers": False, "economy_ended": True}
+    assert handle_pricing_loop_done(engine, {}) is True
+
+    # 经济型栏已结束但仍有未采集（其上还没采完）→ 继续
+    engine.state = {"_processed": {"A"}, "round_had_suppliers": True, "economy_ended": True}
+    assert handle_pricing_loop_done(engine, {}) is False
+
+    # 未结束且无新供应商（可能在下屏）→ 继续（直到 10 或经济型结束）
+    engine.state = {"_processed": {"A"}, "round_had_suppliers": False, "economy_ended": False}
+    assert handle_pricing_loop_done(engine, {}) is False
+    return "PASS ✓"
+
+
+# ======================================================================
 # Suite 2: v2 端到端（导航 + 计价子流程，全 mock）
 # ======================================================================
 
 def test_v2_flow_end_to_end():
     """运行真实 v2_gaode.yaml + 计价/详情子流程（全 mock）。
 
-    验证：导航 → subflow(select_all → verify → loop(extract_list → for_each →
-    detail_capture) → organize) 全链路；标签坐标缓存（PERF-03）；截图命名与 result 聚合兼容。
+    验证：导航 → subflow(select_all → verify → loop(每轮重新识别供应商 + 检查全选经济
+    → 采集第一个新供应商) → organize) 全链路；不重复采集；标签坐标缓存（PERF-03）；
+    截图命名与 result 聚合兼容。
     """
     import tempfile as _tf
 
@@ -285,7 +323,7 @@ def test_v2_flow_end_to_end():
         grounder.query_text.side_effect = _query_side_effect
 
         with patch("collector.platform.gaode.select_all.ensure_all_selected",
-                   return_value=MagicMock()):
+                   return_value=MagicMock()) as mock_ensure:
             engine = None
             from collector.workflows.flow_engine import FlowEngine
             engine = FlowEngine(
@@ -319,6 +357,14 @@ def test_v2_flow_end_to_end():
         assert any("_休息日_scroll_0_阳光出行.jpg" in n for n in shots), shots
         # 6. VLM 统计
         assert engine.stats["vlm_calls"] > 0, engine.stats["vlm_calls"]
+        # 7. 每次回到打车页都重新识别供应商（S2 至少 3 轮）+ 检查全选经济（至少 3 次）
+        s2_calls = [c for c in grounder.query_text.call_args_list
+                    if "经济型" in str(c.args[1])]
+        assert len(s2_calls) >= 3, f"每轮应重新识别供应商, 实际 {len(s2_calls)} 次"
+        assert mock_ensure.call_count >= 3, \
+            f"每次回打车页应检查全选经济, 实际 {mock_ensure.call_count} 次"
+        # 8. 不重复采集：每个供应商恰好被采集一次（_processed 无重复）
+        assert engine.state["_processed"] == {"曹操出行", "阳光出行"}, engine.state["_processed"]
         engine.cleanup()
     return "PASS ✓"
 
@@ -677,6 +723,7 @@ def main() -> None:
     print("\n── Suite 1: 解析/整理逻辑 ──")
     suite1 = [
         ("S2 JSON 数组解析",          test_s2_parse_json_array),
+        ("循环终止条件(满10/经济型采完)", test_pricing_loop_done_termination),
         ("S2 排除出租车/优享",         test_s2_parse_excludes_taxi_and_youxiang),
         ("S2 逐行回退解析",            test_s2_parse_line_by_line_fallback),
         ("S2 空数组",                 test_s2_parse_empty),
