@@ -236,7 +236,7 @@ def test_screenshot_organizer():
 # ======================================================================
 
 def test_pricing_loop_done_termination():
-    """终止 = 采满 10 个，或经济型栏（出租车/特快车/优享型之上）采完。"""
+    """终止 = 满 10 个 或（特殊词出现且其上采完）或（下滑达 3 次且仍无未采集）。"""
     from unittest.mock import MagicMock as _MM
 
     from collector.platform.gaode.supplier_list import handle_pricing_loop_done
@@ -245,26 +245,84 @@ def test_pricing_loop_done_termination():
     engine.profile_cfg = {"collection": {"max_suppliers": 10}}
     engine._log = lambda *a, **k: None
 
-    # 未满 10 且有新供应商 → 继续
-    engine.state = {"_processed": {"A"}, "round_had_suppliers": True, "economy_ended": False}
+    def _state(processed, round_had, economy_ended, scroll_count=0):
+        engine.state = {"_processed": set(processed), "round_had_suppliers": round_had,
+                        "economy_ended": economy_ended, "scroll_count": scroll_count}
+
+    # 有未采集供应商 → 继续
+    _state({"A"}, round_had=True, economy_ended=False)
     assert handle_pricing_loop_done(engine, {}) is False
 
     # 采满 10 个 → 停止
-    engine.state = {"_processed": {f"s{i}" for i in range(10)},
-                    "round_had_suppliers": True, "economy_ended": False}
+    _state({f"s{i}" for i in range(10)}, round_had=True, economy_ended=False)
     assert handle_pricing_loop_done(engine, {}) is True
 
-    # 经济型栏已结束（出租车/特快车/优享型出现）且其上采完 → 停止
-    engine.state = {"_processed": {"A"}, "round_had_suppliers": False, "economy_ended": True}
+    # 特殊词出现且其上采完（空列表）→ 停止（不满 10 也算完成）
+    _state({"A"}, round_had=False, economy_ended=True)
     assert handle_pricing_loop_done(engine, {}) is True
 
-    # 经济型栏已结束但仍有未采集（其上还没采完）→ 继续
-    engine.state = {"_processed": {"A"}, "round_had_suppliers": True, "economy_ended": True}
+    # 特殊词出现但仍有未采集（其上还没采完）→ 继续
+    _state({"A"}, round_had=True, economy_ended=True)
     assert handle_pricing_loop_done(engine, {}) is False
 
-    # 未结束且无新供应商（可能在下屏）→ 继续（直到 10 或经济型结束）
-    engine.state = {"_processed": {"A"}, "round_had_suppliers": False, "economy_ended": False}
+    # 未出现特殊词且空列表、下滑 < 3 → 继续（下滑找更多）
+    _state({"A"}, round_had=False, economy_ended=False, scroll_count=2)
     assert handle_pricing_loop_done(engine, {}) is False
+
+    # 未出现特殊词且空列表、下滑已达 3 次 → 兜底停止
+    _state({"A"}, round_had=False, economy_ended=False, scroll_count=3)
+    assert handle_pricing_loop_done(engine, {}) is True
+
+    # 下滑达 3 次但有未采集 → 继续（兜底仅针对空列表）
+    _state({"A"}, round_had=True, economy_ended=False, scroll_count=3)
+    assert handle_pricing_loop_done(engine, {}) is False
+    return "PASS ✓"
+
+
+# ======================================================================
+# Suite 1c: S2 下滑确认（ARCH-21）
+# ======================================================================
+
+def test_s2_handler_scroll_confirm():
+    """s2_list_suppliers：空列表自动下滑（≤1/4屏）并重新识别；特殊词时确认 1 次后停。"""
+    from unittest.mock import PropertyMock as _PM
+
+    from collector.domain.vision import VisualQueryResult
+    from collector.platform.gaode.supplier_list import handle_s2_list_suppliers
+
+    def _mk(query_responses):
+        engine = MagicMock()
+        type(engine).debug_mode = _PM(return_value=False)
+        type(engine)._screen_size = _PM(return_value=(1080, 2400))
+        engine.state = {}
+        engine.stats = {"vlm_calls": 0, "vlm_failures": 0}
+        engine._log = lambda *a, **k: None
+        engine._wait = lambda *a, **k: None
+        engine.ctx.vision.query_text.side_effect = [
+            VisualQueryResult(raw_response=r) for r in query_responses
+        ]
+        return engine
+
+    # 场景1：空 + 未出现特殊词 → 下滑后找到新供应商
+    e1 = _mk([
+        '{"suppliers": [], "economy_ended": false}',
+        '{"suppliers": ["曹操出行"], "economy_ended": false}',
+    ])
+    handle_s2_list_suppliers(e1, {"id": "s2"})
+    assert e1.adb.slide.call_count == 1, e1.adb.slide.call_count
+    assert e1.state["suppliers"] == ["曹操出行"], e1.state
+    assert e1.state["scroll_count"] == 1
+
+    # 场景2：已出现特殊词 + 空 → 下滑 1 次确认后停（不反复滑）
+    e2 = _mk([
+        '{"suppliers": [], "economy_ended": true}',
+        '{"suppliers": [], "economy_ended": true}',
+    ])
+    handle_s2_list_suppliers(e2, {"id": "s2"})
+    assert e2.adb.slide.call_count == 1, e2.adb.slide.call_count
+    assert e2.state["suppliers"] == []
+    assert e2.state["economy_ended"] is True
+    assert e2.state["scroll_count"] == 1
     return "PASS ✓"
 
 
@@ -724,6 +782,7 @@ def main() -> None:
     suite1 = [
         ("S2 JSON 数组解析",          test_s2_parse_json_array),
         ("循环终止条件(满10/经济型采完)", test_pricing_loop_done_termination),
+        ("S2 空列表下滑确认", test_s2_handler_scroll_confirm),
         ("S2 排除出租车/优享",         test_s2_parse_excludes_taxi_and_youxiang),
         ("S2 逐行回退解析",            test_s2_parse_line_by_line_fallback),
         ("S2 空数组",                 test_s2_parse_empty),

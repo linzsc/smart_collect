@@ -506,6 +506,9 @@ class FlowEngine:
             return int(float(fy) * sh) if fy is not None else default_expr
 
         step_id = self._render(step.get("id", "scroll"))
+        # 计数器：实际执行滑动时 state[counter_key] +1（如 s4_next 的 scroll_count，
+        # 用于「下滑不超过 3 次」兜底）；被 if_state 跳过则不计数。
+        counter_key = step.get("counter_key")
         if self.debug_mode:
             self._screenshot(f"{step_id}_before")   # 滑动前
 
@@ -523,6 +526,8 @@ class FlowEngine:
 
             self._wait(step.get("after_wait", 1.0), "after_scroll")
 
+        if counter_key:
+            self.state[counter_key] = self.state.get(counter_key, 0) + 1
         if self.debug_mode:
             self._screenshot(f"{step_id}_after")    # 滑动后（查看滚动效果）
         self._log(f"  ↕ 滑动: {direction} ×{repeat}")

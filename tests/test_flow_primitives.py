@@ -630,7 +630,10 @@ steps:
 # ======================================================================
 
 def test_scroll_if_state_conditional():
-    """scroll 支持 if_state：条件不满足则跳过滑动（s4_next 仅无新供应商时下滑）。"""
+    """scroll 支持 if_state：条件不满足则跳过滑动。
+
+    s4_next 仅在「当前屏无未采集供应商 且 未出现特殊词」时下滑（出现特殊词不再下滑）。
+    """
     yaml_text = """
 name: t
 steps:
@@ -647,13 +650,12 @@ steps:
     try:
         with patch("time.sleep"):
             e.state["round_had_suppliers"] = True
-            e.state["economy_ended"] = False
             e.run()
             e.adb.slide.assert_not_called()
     finally:
         _cleanup(e)
 
-    # 条件满足（无未采集、经济型未结束）→ 滑动
+    # 条件满足（无未采集、无特殊词）→ 滑动，最多 1/4 屏
     e2 = _make_engine(yaml_text)
     try:
         with patch("time.sleep"):
@@ -662,11 +664,11 @@ steps:
             e2.run()
             e2.adb.slide.assert_called_once()
             args = e2.adb.slide.call_args.args
-            assert args[3] == int(0.25 * 2400), args   # 最多 1/4 屏
+            assert args[3] == int(0.25 * 2400), args
     finally:
         _cleanup(e2)
 
-    # 经济型已结束（无未采集）→ 不滑（避免无谓下滑）
+    # 无未采集 + 已出现特殊词 → 不再下滑（其上的经济型采完即终止）
     e3 = _make_engine(yaml_text)
     try:
         with patch("time.sleep"):
@@ -676,6 +678,41 @@ steps:
             e3.adb.slide.assert_not_called()
     finally:
         _cleanup(e3)
+    return "PASS ✓"
+
+
+def test_scroll_counter_key():
+    """scroll 支持 counter_key：实际滑动时 state 计数 +1（s4_next 下滑兜底 3 次）。"""
+    yaml_text = """
+name: t
+steps:
+  - id: "s4_next"
+    type: "scroll"
+    direction: "up"
+    duration_ms: 0
+    counter_key: "scroll_count"
+    if_state:
+      round_had_suppliers: false
+"""
+    # 条件满足 → 滑动并计数 +1
+    e = _make_engine(yaml_text)
+    try:
+        with patch("time.sleep"):
+            e.state["round_had_suppliers"] = False
+            e.run()
+            assert e.state.get("scroll_count") == 1, e.state
+    finally:
+        _cleanup(e)
+
+    # 条件不满足（被跳过）→ 不计数
+    e2 = _make_engine(yaml_text)
+    try:
+        with patch("time.sleep"):
+            e2.state["round_had_suppliers"] = True
+            e2.run()
+            assert e2.state.get("scroll_count", 0) == 0, e2.state
+    finally:
+        _cleanup(e2)
     return "PASS ✓"
 
 
@@ -788,7 +825,8 @@ def main() -> None:
             ("back 返回前截图", test_back_debug_captures_before),
         ]),
         ("Suite 12: scroll 条件执行", [
-            ("if_state 跳过/执行/经济型结束不滑", test_scroll_if_state_conditional),
+            ("if_state 跳过/执行/特殊词不滑", test_scroll_if_state_conditional),
+            ("counter_key 计数（兜底3次）", test_scroll_counter_key),
         ]),
     ]
 

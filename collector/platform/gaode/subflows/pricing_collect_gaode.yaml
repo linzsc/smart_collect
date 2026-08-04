@@ -36,7 +36,7 @@ steps:
     type: "loop_until"
     description: "每次回打车页重新识别供应商并检查全选经济，逐个采集（不重复）；终止=满10个 或 经济型栏(出租车/特快车/优享型之上)采完"
     until_handler: "pricing_loop_done"
-    max_rounds: 10
+    max_rounds: 15
     steps:
       # ① 重新识别当前屏供应商（列表可能变化；只返回未采集过的）
       - id: "s2_list"
@@ -71,17 +71,8 @@ steps:
             type: "mark_supplier_processed"
             description: "标记当前运力商已采集（防重复）"
 
-      # ④ 当前屏无新供应商且经济型栏未结束 → 下滑最多 1/4 屏找更多（不每轮都滑）
-      - id: "s4_next"
-        type: "scroll"
-        description: "当前屏无新运力商时下滑（最多1/4屏）看是否有新运力商"
-        direction: "up"
-        from_y: 0.5
-        to_y: 0.25
-        repeat: 1
-        if_state:
-          round_had_suppliers: false
-          economy_ended: false
+      # ④ 下滑找更多由 S2（s2_list_suppliers）内部完成：空列表自动下滑 ≤1/4 屏
+      #    并重新识别（累计 ≤3 次兜底），终止判定看到的永远是下滑后的结果
 
   # ── 结果整理（RES-01）──
   - id: "organize_result"

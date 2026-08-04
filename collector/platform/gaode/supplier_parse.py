@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 import re
 
-_SKIP_SUPPLIERS = {"出租车", "优享"}          # 精确匹配（兼容旧引用）
-_SKIP_KEYWORDS = ("快车", "拼车", "的士", "出租", "优享")      # 关键词：快车/拼车/出租车/的士/优享类一律不采集（CAP-08/09）
+# 不需要采集的运力商（CAP-08/09）：出租车/特快车/特惠快车/快车/拼车/的士/出租/优享类
+_SKIP_SUPPLIERS = {"出租车", "特快车", "优享"}          # 精确匹配
+_SKIP_KEYWORDS = ("快车", "拼车", "特快", "的士", "出租", "优享")   # 关键词子串
 
 
 def parse_suppliers_response(raw: str) -> tuple[list[str], bool]:
