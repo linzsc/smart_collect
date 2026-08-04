@@ -16,7 +16,7 @@ Usage:
       --vlm-api-key "sk-xxx" \\
       --vlm-base-url "https://ws-xxxx.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
 
-  # v2 — 底部打车tab进入 + 计价采集（pricing_collect 为 gaode 平台步骤）
+  # v2 — 底部打车tab进入 + 计价采集（YAML 子流程 subflows/pricing_collect_gaode.yaml）
   .venv/bin/python -m collector.demo \\
       --platform gaode --flow v2 \\
       --address "西北旺万象汇" \\

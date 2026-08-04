@@ -1,8 +1,10 @@
 """高德平台接入描述
 ============================================================================
 
-把高德特有的 CLI 参数、模板变量和 `pricing_collect` 步骤封装为 Platform，
-注册到 `collector/platform/registry.py`。通用引擎不再直接依赖本模块。
+把高德特有的 CLI 参数、模板变量和平台专属步骤（select_all / s2_list_suppliers /
+pricing_loop_done / pricing_result_organize）封装为 Platform，注册到
+`collector/platform/registry.py`。通用引擎不再直接依赖本模块。
+计价采集控制流已由 YAML 子流程（subflows/pricing_collect_gaode.yaml）表达。
 """
 
 from __future__ import annotations
@@ -30,43 +32,9 @@ def add_cli_args(parser: argparse.ArgumentParser) -> None:
 
 def build_flow_vars(args: argparse.Namespace, flow_name: str) -> dict[str, str]:
     vars_: dict[str, str] = {"Address": args.address}
-    if flow_name in ("v2", "v3"):
+    if flow_name in ("v2", "v3"):   # 需要上车点
         vars_["Pickup"] = args.pickup or "我的位置"
     return vars_
-
-
-# ---------------------------------------------------------------------------
-# 平台特有步骤：pricing_collect（委托给 RidePricingFSM）
-# ---------------------------------------------------------------------------
-
-def handle_pricing_collect(engine, step: dict) -> None:
-    """执行计价采集子流程（原 FlowEngine._do_pricing_collect 逻辑）。"""
-    supplier = step.get("supplier", "经济型")
-    engine._log(f"── 计价采集: {supplier} ──")
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    pricer = RidePricingFSM(
-        adb=engine.adb,
-        grounder=engine.grounder,
-        supplier=supplier,
-        profile_cfg=engine.profile_cfg,
-        output_dir=str(engine.output_dir),
-        verbose=engine.verbose,
-        mode=engine.mode,
-    )
-    try:
-        pricer.run()
-    finally:
-        pricer.cleanup()  # 删除 collect 模式探针临时目录
-    # 合并 VLM / 耗时统计
-    engine.stats["vlm_calls"] += pricer.stats.get("vlm_calls", 0)
-    engine.stats["vlm_failures"] += pricer.stats.get("vlm_failures", 0)
-    engine.stats["api_seconds"] = engine.stats.get("api_seconds", 0.0) + pricer.stats.get("api_seconds", 0.0)
-    engine.add_wait(pricer.stats.get("wait_seconds", 0.0))  # 并入全局等待累加器
-
-    # ── 结果整理：筛选必要截图并聚合到 result/（RES-01）──
-    _organize_result_screenshots(engine)
 
 
 def _organize_result_screenshots(engine) -> None:
@@ -120,7 +88,33 @@ def handle_select_all(engine, step: dict) -> None:
         verbose=engine.verbose,
         wait_after_click=engine.timing.get("after_tap_wait", 2.0),
     )
+    engine.state["select_all_done"] = True   # 供 verify 步骤断言
     engine._log(f"  ✓ {label} 已勾选")
+
+
+# ---------------------------------------------------------------------------
+# 平台特有步骤：pricing_result_organize（YAML 流程末尾聚合结果，RES-01）
+# ---------------------------------------------------------------------------
+
+def handle_pricing_result_organize(engine, step: dict) -> None:
+    """计价采集结束后，把必要截图聚合到 result/（RES-01，复用 FSM 路径的整理函数）。"""
+    _organize_result_screenshots(engine)
+
+
+# ---------------------------------------------------------------------------
+# 平台特有步骤：extract_list / loop_until 的 S2 handler（YAML 原语流程 v4）
+# ---------------------------------------------------------------------------
+
+def handle_s2_list_suppliers(engine, step: dict) -> None:
+    """extract_list: 识别当前屏经济型供应商列表（写入 engine.state）。"""
+    from collector.platform.gaode.supplier_list import handle_s2_list_suppliers as _impl
+    _impl(engine, step)
+
+
+def handle_pricing_loop_done(engine, step: dict) -> bool:
+    """loop_until: 经济型栏结束或本轮无新运力商则终止。"""
+    from collector.platform.gaode.supplier_list import handle_pricing_loop_done as _impl
+    return _impl(engine, step)
 
 
 # ---------------------------------------------------------------------------
@@ -136,6 +130,10 @@ def build_platform() -> Platform:
         default_flow="v1",
         add_cli_args=add_cli_args,
         build_flow_vars=build_flow_vars,
-        step_handlers={"pricing_collect": handle_pricing_collect,
-                        "select_all": handle_select_all},
+        step_handlers={
+            "select_all": handle_select_all,
+            "pricing_result_organize": handle_pricing_result_organize,
+            "s2_list_suppliers": handle_s2_list_suppliers,
+            "pricing_loop_done": handle_pricing_loop_done,
+        },
     )

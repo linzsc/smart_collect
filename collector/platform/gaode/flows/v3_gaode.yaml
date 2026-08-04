@@ -7,10 +7,10 @@ description: "点击特惠快车三角形展开盒子页，全选后确认，勾
 package: "com.autonavi.minimap"
 
 timing:
-  app_launch_wait: 3.0
-  after_tap_wait: 2.0
+  app_launch_wait: 1.0
+  after_tap_wait: 1.0
   after_input_wait: 1.0
-  after_confirm_wait: 3.0
+  after_confirm_wait: 1.0
 
 steps:
   - id: "open_app"
@@ -82,7 +82,7 @@ steps:
   # 冒泡场景开始
   # ════════════════════════════════════════════════════════════════════
 
-  # ── S0: 打车页上滑 (仿照 v2→RidePricingFSM._s0_scroll_up) ──
+  # ── S0: 打车页上滑 ──
   - id: "s0_scroll_up"
     type: "scroll"
     description: "向上滑动拉出下方内容"

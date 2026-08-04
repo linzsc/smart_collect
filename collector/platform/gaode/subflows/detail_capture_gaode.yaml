@@ -1,0 +1,75 @@
+# 详细计价规则采集子流程（S3a/S3c）
+# 供 pricing_collect_gaode.yaml 的 for_each 通过 subflow 引用，与主流程共享 ctx/stats/截图编号。
+# 依赖运行时状态模板：{{.S.supplier}}（当前运力商）、{{.S.tab}}（工作日/休息日）。
+name: "detail_capture-高德-详细计价规则采集"
+version: "1"
+description: "S3a 点问号 → S3c 查看详细计价规则 → 工作日/休息日滚动采集 → 返回×2"
+
+steps:
+  # ── S3a: 点「{{.S.supplier}}」问号（找不到则跳过，等价 FSM 找不到问号跳过）──
+  - id: "q_{{.S.supplier}}"
+    type: "ground_click"
+    description: "点「{{.S.supplier}}」问号"
+    optional: true
+    ref_image: "button_to_price.png"
+    ground:
+      element_desc: "找「{{.S.supplier}}」行「预估」前面的 '?' 问号。附件是参考图。返回 bbox 和中心坐标。"
+      retry_alt_descs:
+        - "「{{.S.supplier}}」行价格右侧的问号图标按钮"
+    wait_after: 1.2
+
+  - id: "popup_wait"
+    type: "wait"
+    description: "等待计价弹窗稳定"
+    seconds: 1.2
+
+  # ── S3c: 点击「查看详细计价规则」──
+  - id: "detail_btn"
+    type: "ground_click"
+    description: "点击「查看详细计价规则」"
+    optional: true
+    ground:
+      element_desc: "高德打车计价弹窗。找「查看详细计价规则」或「计价规则」入口（弹窗中下部的文字链接/按钮）。返回 bbox 和中心坐标。"
+      retry_alt_descs:
+        - "计价弹窗中的「查看详细计价规则」文字链接"
+    wait_after: 1.5
+
+  # ── 工作日 / 休息日：切换标签并滚动采集 ──
+  - id: "tab_each"
+    type: "for_each"
+    description: "切换工作日/休息日并滚动采集"
+    items: ["工作日", "休息日"]
+    item: "tab"
+    steps:
+      - id: "tab_{{.S.tab}}"
+        type: "ground_click"
+        description: "点击「{{.S.tab}}」标签页"
+        cache_key: "tab_{{.S.tab}}"
+        ground:
+          element_desc: "计价规则详情页。找「{{.S.tab}}」标签页（与另一标签并列）。返回 bbox 和中心坐标。"
+          retry_alt_descs:
+            - "详情页顶部「{{.S.tab}}」标签"
+        wait_after: 0.5
+
+      - id: "scroll_{{.S.tab}}"
+        type: "scroll_until_visible"
+        description: "「{{.S.tab}}」下滑至出现「预约用车」或页面无变化"
+        target_text: "预约用车"
+        target_prompt: "这是高德打车「详细计价规则」页面截图。请判断页面上是否出现了蓝色文字「预约用车」。只输出 YES 或 NO。"
+        max_swipes: 12
+        frame_suffix: "{{.S.supplier}}"
+        stop_on_stable: true
+        stable_threshold: 0.01
+        wait_after_slide: 0.3
+        scroll_back_to_top: true
+
+  # ── 返回 ×2：详细计价页 → 计价弹窗 → 打车页（PERF-02 确定性返回）──
+  - id: "exit_detail"
+    type: "back"
+    description: "返回计价弹窗"
+    wait_after: 0.8
+
+  - id: "exit_popup"
+    type: "back"
+    description: "返回打车页"
+    wait_after: 0.8

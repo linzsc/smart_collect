@@ -1,6 +1,6 @@
 # 智能采集 — 高德地图打车采集
 
-基于 **VLM 视觉定位** + **YAML 配置驱动** + **FSM 状态机** 的移动端自动采集。
+基于 **VLM 视觉定位** + **YAML 配置驱动（流程原语 + 子流程）** 的移动端自动采集。
 
 ## 架构
 
@@ -38,7 +38,7 @@ adb devices
 | 流程 | 入口 | 步骤 | 说明 |
 |------|------|------|------|
 | `v1` | 首页搜索框 | 5 | 搜索目的地 → 选候选 → 打车tab |
-| `v2` | 底部打车tab | 7 | 直接进打车页 → 输起终点 → 上滑 |
+| `v2` | 底部打车tab | — | 进打车页 → 输起终点 → **计价采集子流程**（YAML 原语：select_all / extract_list / for_each / loop_until / subflow） |
 | `v3` | 打车tab + 冒泡 | 16 | v2 前缀 + 三角形展开 → 盒子全选 → 确认 → 经济型全选 |
 
 v2 / v3 需要 `--pickup`，v1 从当前位置出发。
@@ -59,21 +59,23 @@ v2 / v3 需要 `--pickup`，v1 从当前位置出发。
 assets/                # 素材（参考图）
 collector/
   cli/                 # 参数解析和依赖组装（入口 demo.py）
-  workflows/           # 正常确定性流程（YAML 流程引擎）
+  workflows/           # 正常确定性流程（YAML 流程引擎 + 流程原语）
+  application/         # 共享执行上下文 ExecutionContext（stats/等待/截图/标注）
   platform/gaode/      # 高德页面、Prompt、Flow、Profile
     flows/             # YAML 流程配置
+    subflows/          # 可复用子流程（计价采集 / 详细计价规则）
     profiles/          # 平台配置
   infrastructure/
     device/            # ADB 设备控制
-    vision/            # VLM 视觉定位
+    vision/            # VLM 视觉定位 + domain/vision 适配器
   domain/              # 数据模型、接口、错误（不依赖 SDK）
+    vision/            # 视觉能力接口 + 结构化结果
   quality/             # 状态验证、Ground Truth、Diff
 tests/
 output/                # 运行时输出（截图 + 标注）
 ```
 
-> 结构按 `codex.md` 目标布局重构；旧导入路径（如 `collector.adb_utils`、
-> `collector.ride_pricing`）保留兼容层，新代码请使用 canonical 路径。
+> 结构按 `codex.md` 目标布局重构；新代码请使用 canonical 路径。
 > 入口：`python -m collector.demo`（兼容）或 `python -m collector.cli.demo`。
 > 平台由 `collector/platform/registry.py` 注册，见下方「多平台接入」。
 
@@ -86,11 +88,13 @@ output/                # 运行时输出（截图 + 标注）
    - `flows_dir` / `profile_path` / `default_flow`
    - 平台特有 CLI 参数（`add_cli_args`，如 gaode 的 `--address`/`--pickup`）
    - 模板变量（`build_flow_vars`）
-   - 平台特有步骤（`step_handlers`，如 gaode 的 `pricing_collect`）
+   - 平台特有步骤（`step_handlers`，如 gaode 的 `select_all` / `s2_list_suppliers` / `pricing_loop_done` / `pricing_result_organize`）
 3. 在 `collector/platform/registry.py` 的 `_register_builtins()` 加一行注册。
 
 通用代码（`cli`、`workflows/flow_engine`、`infrastructure`）无需改动。
 示例：`tests/test_pricing_collect.py` 的 `test_fake_platform_zero_intrusion`。
+
+> 完整步骤、可复用清单与新平台模板见 **[接入新平台指南.md](接入新平台指南.md)**。
 
 ## 运行模式
 

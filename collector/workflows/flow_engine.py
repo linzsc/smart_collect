@@ -28,15 +28,12 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
-import tempfile
 import time
 from pathlib import Path
 from string import Template
 from typing import Any
 
-from PIL import Image, ImageDraw
-
+from collector.application.context import ExecutionContext
 from collector.infrastructure.device.adb_utils import AdbTools
 from collector.infrastructure.vision.vlm_grounder import VLMGrounder
 
@@ -67,25 +64,32 @@ class FlowEngine:
         self.grounder = grounder
         self.vars = vars_ or {}
         self.verbose = verbose
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
         self.profile_cfg = profile_cfg or {}
-        # 平台特有步骤（如 pricing_collect）由 Platform.step_handlers 注入，
+        # 平台特有步骤（如 gaode 的 select_all）由 Platform.step_handlers 注入，
         # 通用引擎不直接依赖任何平台模块。
         self._platform_step_handlers = platform_step_handlers or {}
-        # 输出模式: debug(每步截图+标记图) / collect(仅保存详细计价页截图)
-        self.mode = mode if mode in ("debug", "collect") else "debug"
-        self._scratch_dir: Path | None = None
+        # 共享执行上下文：stats/等待/截图/标注/日志 收敛到 application/context.py。
+        # 计价 FSM 等子流程通过 engine.ctx 共享同一实例，统计与等待自动归并。
+        self.ctx = ExecutionContext(
+            adb=adb, grounder=grounder,
+            output_dir=output_dir, mode=mode, verbose=verbose,
+            log_prefix="Flow",
+        )
+        self.output_dir = self.ctx.output_dir
+        self.mode = self.ctx.mode
+        self.stats = self.ctx.stats
+
+        self._flow_dir = Path(flow_path).resolve().parent  # subflow 相对路径解析基准
 
         with open(flow_path, "r", encoding="utf-8") as f:
             self.flow = self._deep_resolve(self.vars, f.read())
 
         self.timing = self.flow.get("timing", {})
         self.package = self.flow.get("package", "")
+        # 运行时状态：extract_list / for_each / loop_until / verify 读写这里，
+        # 模板 `{{.S.<key>}}` 引用（区别于加载期变量 `{{.<Key>}}`）。
+        self.state: dict[str, Any] = dict(self.flow.get("init_state", {}))
         self._shot_seq = 0
-        self.stats = {"vlm_calls": 0, "vlm_failures": 0, "steps_executed": 0,
-              "api_seconds": 0.0, "wait_seconds": 0.0, "elapsed": 0.0}
-        self._wait_total = 0.0  # 累计流程等待时长
 
     # ------------------------------------------------------------------
     # 输出模式
@@ -94,41 +98,37 @@ class FlowEngine:
     @property
     def debug_mode(self) -> bool:
         """debug 模式：每步截图 + 标记图。"""
-        return self.mode == "debug"
+        return self.ctx.debug_mode
 
     @property
     def scratch_dir(self) -> Path | None:
         """collect 模式下的临时截图目录（供 VLM 定位，不计入最终输出）。"""
-        if self.debug_mode:
-            return None
-        if self._scratch_dir is None:
-            self._scratch_dir = Path(tempfile.mkdtemp(prefix="collector_scratch_"))
-        return self._scratch_dir
+        return self.ctx.scratch_dir
 
     def cleanup(self) -> None:
         """删除 collect 模式的临时截图目录。"""
-        if self._scratch_dir is not None:
-            shutil.rmtree(self._scratch_dir, ignore_errors=True)
-            self._scratch_dir = None
+        self.ctx.cleanup()
 
     # ------------------------------------------------------------------
     # 耗时统计
     # ------------------------------------------------------------------
 
     def _wait(self, seconds: float, tag: str = "") -> None:
-        """带统计的等待：累加流程设定的等待时长。"""
-        if seconds and seconds > 0:
-            time.sleep(seconds)
-            self._wait_total += float(seconds)
+        """带统计的等待：累加流程设定的等待时长（归入共享 ctx）。"""
+        self.ctx.wait(seconds, tag)
 
     def add_wait(self, seconds: float) -> None:
         """合并子流程（如平台 handler）产生的等待时长，用于总耗时归因。"""
-        self._wait_total += float(seconds or 0.0)
+        self.ctx.add_wait(seconds)
+
+    @property
+    def _wait_total(self) -> float:
+        """累计流程等待时长（委托 ctx，供耗时归因读取）。"""
+        return self.ctx.wait_seconds
 
     def _api_seconds(self) -> float:
         """当前累计 API 耗时（对 mock 兼容返回 0.0）。"""
-        v = getattr(self.grounder, "api_seconds", None)
-        return v if isinstance(v, (int, float)) else 0.0
+        return self.ctx.api_seconds
 
     # ------------------------------------------------------------------
     # Public API
@@ -143,9 +143,23 @@ class FlowEngine:
         api_t0 = self._api_seconds()
         wait_t0 = self._wait_total
 
-        for step in self.flow.get("steps", []):
+        self._run_steps(self.flow.get("steps", []))
+
+        self.stats["elapsed"] = time.time() - run_t0
+        self.stats["api_seconds"] = self._api_seconds() - api_t0
+        self.stats["wait_seconds"] = self._wait_total - wait_t0
+        self._log(f"\n── {name} 完成 ──")
+        self._log(f"步骤: {self.stats['steps_executed']}, VLM: {self.stats['vlm_calls']} 次")
+        self._log(
+            f"⏱ 总耗时 {self.stats['elapsed']:.1f}s | "
+            f"API {self.stats['api_seconds']:.1f}s | 等待 {self.stats['wait_seconds']:.1f}s"
+        )
+
+    def _run_steps(self, steps: list[dict]) -> None:
+        """顺序执行一组步骤（顶层 run 与 for_each/loop_until/subflow 共用）。"""
+        for step in steps:
             self.stats["steps_executed"] += 1
-            step_id = step.get("id", "?")
+            step_id = self._render(step.get("id", "?"))
             step_type = step.get("type", "?")
             optional = step.get("optional", False)
 
@@ -169,8 +183,20 @@ class FlowEngine:
                     self._do_scroll(step)
                 elif step_type == "wait":
                     self._do_wait(step)
+                elif step_type == "back":
+                    self._do_back(step)
                 elif step_type == "screenshot":
                     self._do_screenshot(step)
+                elif step_type == "extract_list":
+                    self._do_extract_list(step)
+                elif step_type == "for_each":
+                    self._do_for_each(step)
+                elif step_type == "loop_until":
+                    self._do_loop_until(step)
+                elif step_type == "subflow":
+                    self._do_subflow(step)
+                elif step_type == "verify":
+                    self._do_verify(step)
                 elif step_type in self._platform_step_handlers:
                     self._platform_step_handlers[step_type](self, step)
                 else:
@@ -194,16 +220,6 @@ class FlowEngine:
                 f"API {api_s:.1f}s | 等待 {wait_s:.1f}s"
             )
 
-        self.stats["elapsed"] = time.time() - run_t0
-        self.stats["api_seconds"] = self._api_seconds() - api_t0
-        self.stats["wait_seconds"] = self._wait_total - wait_t0
-        self._log(f"\n── {name} 完成 ──")
-        self._log(f"步骤: {self.stats['steps_executed']}, VLM: {self.stats['vlm_calls']} 次")
-        self._log(
-            f"⏱ 总耗时 {self.stats['elapsed']:.1f}s | "
-            f"API {self.stats['api_seconds']:.1f}s | 等待 {self.stats['wait_seconds']:.1f}s"
-        )
-
     # ------------------------------------------------------------------
     # Step handlers
     # ------------------------------------------------------------------
@@ -214,7 +230,20 @@ class FlowEngine:
         self._wait(self.timing.get("app_launch_wait", 3.0), "app_launch_wait")
 
     def _do_ground_click(self, step: dict) -> None:
+        # ── 坐标缓存（PERF-03 语义）：cache_key 命中直接点击，不调 VLM/不截图 ──
+        cache_key = self._render(step.get("cache_key"))
+        if cache_key:
+            cached = self.state.get(cache_key)
+            if isinstance(cached, (list, tuple)) and len(cached) == 2:
+                cx, cy = int(cached[0]), int(cached[1])
+                self._log(f"  ♻ 复用缓存坐标 {cache_key}: ({cx},{cy})")
+                self.adb.click(cx, cy)
+                self._wait(self._after_tap_wait(step), "after_tap_wait")
+                return
+
         shot = self._screenshot(step.get("id", "step"))
+        ref_img = self._resolve_ref(step.get("ref_image"))
+        ref_imgs = self._resolve_refs(step.get("ref_images"))
 
         # ── optional: page verification ──
         verify_cfg = step.get("verify_page")
@@ -227,30 +256,39 @@ class FlowEngine:
                 else:
                     self._log("  ⚠ 恢复失败，继续尝试定位目标元素")
 
-        # ── grounding ──
+        # ── grounding（描述支持 `{{.S.<key>}}` 运行时状态模板）──
         cfg = step.get("ground", {})
-        desc = cfg.get("element_desc", "")
-        alts = cfg.get("retry_alt_descs", [])
+        desc = self._render(cfg.get("element_desc", ""))
+        alts = [self._render(a) for a in cfg.get("retry_alt_descs", [])]
 
-        center = self._vlm_ground_and_click(shot, desc, alts, step.get("id", "?"))
+        center = self._vlm_ground_and_click(shot, desc, alts, step.get("id", "?"),
+                                            ref_image=ref_img, ref_images=ref_imgs)
 
         if center:
-            self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
+            if cache_key:
+                self.state[cache_key] = [center[0], center[1]]
+            self._wait(self._after_tap_wait(step), "after_tap_wait")
             return
 
         # ── fallback ──
         fallback = step.get("fallback")
         if fallback:
             self._log("  🔄 兜底查找…")
-            center = self._vlm_ground_and_click(shot, fallback.get("prompt", ""),
-                                                 [], f"{step.get('id','?')}_fallback")
+            center = self._vlm_ground_and_click(shot, self._render(fallback.get("prompt", "")),
+                                                 [], f"{step.get('id','?')}_fallback",
+                                                 ref_image=ref_img, ref_images=ref_imgs)
             if center:
-                self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
+                self._wait(self._after_tap_wait(step), "after_tap_wait")
                 return
 
         if step.get("mandatory"):
             raise StepFailed(f"mandatory ground_click '{step.get('id')}' failed")
         self._log(f"  ⚠ 未找到目标元素")
+
+    def _after_tap_wait(self, step: dict) -> float:
+        """步骤可配置等待（wait_after），缺省用 timing.after_tap_wait。"""
+        wa = step.get("wait_after")
+        return float(wa) if wa is not None else float(self.timing.get("after_tap_wait", 2.0))
 
     def _do_ground_doublecheck(self, step: dict) -> None:
         """ground_click + 截图重验证（用于全选等需确认的操作）.
@@ -271,13 +309,13 @@ class FlowEngine:
         shot = self._screenshot(f"{step_id}_1")
         result1 = self._vlm_ground_ref(shot, desc, ref_img, ref_imgs)
 
-        if result1.get("selected"):
+        if result1.selected:
             self._log("  ✓ 首轮判断已选中，跳过点击")
             return
 
-        if result1.get("found") and result1.get("center"):
-            bbox = result1.get("bbox", [0, 0, 0, 0])
-            cx, cy = result1["center"]
+        if result1.found and result1.center:
+            bbox = result1.bbox or [0, 0, 0, 0]
+            cx, cy = result1.center
             self._log(f"  ○ 首轮判断未选中 → 点击 ({cx},{cy})")
             self._annotate(shot, f"{step_id}_1", bbox, cx, cy, 0)
             self.adb.click(cx, cy)
@@ -299,15 +337,15 @@ class FlowEngine:
         shot2 = self._screenshot(f"{step_id}_2")
         result2 = self._vlm_ground_ref(shot2, desc, ref_img, ref_imgs)
 
-        if result2.get("selected"):
+        if result2.selected:
             self._log("  ✓ Double check 已确认选中")
             return
 
         # 第二轮未选中 → 再 click 一次
         self._log("  ⚠ Double check 未选中，再次点击")
-        if result2.get("found") and result2.get("center"):
-            bbox2 = result2.get("bbox", [0, 0, 0, 0])
-            cx2, cy2 = result2["center"]
+        if result2.found and result2.center:
+            bbox2 = result2.bbox or [0, 0, 0, 0]
+            cx2, cy2 = result2.center
             self._annotate(shot2, f"{step_id}_retry", bbox2, cx2, cy2, 0)
             self.adb.click(cx2, cy2)
             self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
@@ -319,42 +357,80 @@ class FlowEngine:
                 self._wait(self.timing.get("after_tap_wait", 2.0), "after_tap_wait")
 
     def _do_scroll_until_visible(self, step: dict) -> None:
-        """小步下滑直到 VLM 在截图中发现指定文字."""
-        step_id = step.get("id", "?")
-        target = step.get("target_text", "")
+        """小步下滑直到 VLM 在截图中发现指定文字。
+
+        增强选项：
+          - frame_suffix: 滚动帧文件名后缀（如 `{{.S.supplier}}`，供 result 聚合分组）
+          - stop_on_stable: 未命中标记且页面不再变化（像素比对）时停止
+          - stable_threshold: 变化像素占比阈值（默认 0.01）
+          - wait_after_slide: 每次滑动后等待（默认 0.5s）
+          - scroll_back_to_top: 结束后快速回顶 3 次
+        """
+        step_id = self._render(step.get("id", "?"))
+        target = self._render(step.get("target_text", ""))
         max_swipes = step.get("max_swipes", 15)
+        suffix = self._render(step.get("frame_suffix", ""))
+        stable_threshold = float(step.get("stable_threshold", 0.01))
+        wait_after_slide = float(step.get("wait_after_slide", 0.5))
         sw, sh = self._screen_size
         amount = sh // 3
         y1, y2 = sh * 3 // 4, sh * 3 // 4 - amount
 
+        prev = None
         for i in range(max_swipes):
-            shot = self._screenshot(f"{step_id}_scroll_{i}")
-            desc = f"当前截图中是否出现「{target}」文字？只回答 YES 或 NO。"
+            stem = f"{step_id}_scroll_{i}" + (f"_{suffix}" if suffix else "")
+            shot = self._screenshot(stem)
+            if step.get("target_prompt"):
+                desc = self._render(step.get("target_prompt"))
+            else:
+                desc = f"当前截图中是否出现「{target}」文字？只回答 YES 或 NO。"
             self.stats["vlm_calls"] += 1
-            resp = self.grounder.query_text(shot, desc)
-            raw = resp.get("raw_response", "").strip().upper()
-            self._log(f"  [{i}] 找「{target}」: {'FOUND' if 'YES' in raw else '↓'}")
+            resp = self.ctx.vision.query_text(shot, desc)
+            found = resp.is_affirmative
+            self._log(f"  [{i}] 找「{target}」: {'FOUND' if found else '↓'}")
 
-            if "YES" in raw:
-                self._screenshot(f"{step_id}_found")
+            if found:
+                found_stem = f"{step_id}_found" + (f"_{suffix}" if suffix else "")
+                self._screenshot(found_stem)
                 self._log(f"  ✓ 找到「{target}」，停止")
+                self._scroll_back_to_top_if_needed(step, sw, sh)
                 return
 
+            # CAP-05 语义：未命中标记且页面无变化 → 停止
+            if step.get("stop_on_stable") and prev is not None:
+                from collector.quality.state_verifier import verify_screen_diff
+                diff = verify_screen_diff(prev, shot)
+                if diff < stable_threshold:
+                    self._log(f"  [{i}] 页面无变化 (diff={diff:.4f})，停止")
+                    self._scroll_back_to_top_if_needed(step, sw, sh)
+                    return
+
             self.adb.slide(sw // 2, y1, sw // 2, y2, 300)
-            self._wait(0.5, "short_wait")
+            self._wait(wait_after_slide, "detail_scroll")
+            prev = shot
 
         self._log(f"  ⚠ 未找到「{target}」")
+        self._scroll_back_to_top_if_needed(step, sw, sh)
+
+    def _scroll_back_to_top_if_needed(self, step: dict, sw: int, sh: int) -> None:
+        """快速回顶 3 次大段上滑（不截图不标注，纯机械操作）。"""
+        if not step.get("scroll_back_to_top"):
+            return
+        for _ in range(3):
+            self.adb.slide(sw // 2, sh // 4, sw // 2, sh * 3 // 4, 150)
+            self._wait(0.1, "scroll_top_wait")
+        self._log("  ↑ 回顶完成")
 
     def _do_input_text(self, step: dict) -> None:
         step_id = step.get("id", "?")
-        value = step.get("value", "")
+        value = self._render(step.get("value", ""))
         confirm_method = step.get("confirm", "key_enter")
 
         # 1. Screenshot + ground the input box
         shot = self._screenshot(f"{step_id}_before_input")
         cfg = step.get("ground", {})
-        desc = cfg.get("element_desc", "文字输入框")
-        alts = cfg.get("retry_alt_descs", [])
+        desc = self._render(cfg.get("element_desc", "文字输入框"))
+        alts = [self._render(a) for a in cfg.get("retry_alt_descs", [])]
 
         center = self._vlm_ground_and_click(shot, desc, alts, f"{step_id}_input")
 
@@ -432,6 +508,211 @@ class FlowEngine:
         self._screenshot(step.get("id", "shot"))
 
     # ------------------------------------------------------------------
+    # 流程原语：back / extract_list / for_each / loop_until / subflow / verify
+    # ------------------------------------------------------------------
+
+    def _do_back(self, step: dict) -> None:
+        """确定性返回：adb.back() + 可配置等待（PERF-02 方案一）。"""
+        self.adb.back()
+        self._wait(float(step.get("wait_after", 1.0)), "back_wait")
+
+    def _do_extract_list(self, step: dict) -> None:
+        """结构化提取列表（写入 engine.state）。
+
+        - handler: 平台步骤处理器（如 gaode 的 s2_list_suppliers），
+          由 handler 自行执行 VLM 并写入 state；
+        - 内置模式：prompt + parse（json_array / json_dict）+ skip_keywords，
+          结果写入 state[var]，可选 meta 写入 state[meta_var]。
+        """
+        handler = step.get("handler")
+        if handler:
+            fn = self._platform_step_handlers.get(handler)
+            if fn is None:
+                raise StepFailed(f"extract_list: 未知 handler {handler}")
+            fn(self, step)
+            return
+
+        var = step.get("var", "items")
+        meta_var = step.get("meta_var")
+        prompt = self._render(step.get("prompt", ""))
+        shot = self._screenshot(step.get("id", "extract"))
+        self.stats["vlm_calls"] += 1
+        resp = self.ctx.vision.query_text(shot, prompt)
+        raw = resp.raw_response
+        items, meta = self._parse_extract_response(raw, step)
+        self.state[var] = items
+        if meta_var is not None:
+            self.state[meta_var] = meta
+        self._log(f"  extract_list: {len(items)} 项 -> state.{var}" +
+                  (f" | meta.{meta_var}={meta}" if meta_var is not None else ""))
+
+    @staticmethod
+    def _parse_extract_response(raw: str, step: dict) -> tuple[list[Any], Any]:
+        """内置 extract_list 响应解析。
+
+        parse=json_array: 顶层 JSON 数组（每项取文本）。
+        parse=json_dict:  顶层 JSON 对象，items_key 取列表，meta_key 取 meta。
+        均支持 skip_keywords 过滤；解析失败返回 ([], None)。
+        """
+        cleaned = raw.strip()
+        for m in ("```json", "```"):
+            if cleaned.startswith(m):
+                cleaned = cleaned[len(m):].strip()
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3].strip()
+
+        skip = step.get("skip_keywords", [])
+        items: list[Any] = []
+        meta: Any = None
+        try:
+            parsed = json.loads(cleaned)
+        except (json.JSONDecodeError, ValueError):
+            parsed = None
+
+        if isinstance(parsed, list):
+            items = [str(i).strip() for i in parsed if str(i).strip()]
+        elif isinstance(parsed, dict):
+            raw_items = parsed.get(step.get("items_key", "items"))
+            if isinstance(raw_items, list):
+                items = [str(i).strip() for i in raw_items if str(i).strip()]
+            meta_key = step.get("meta_key")
+            if meta_key:
+                meta = parsed.get(meta_key)
+        if skip:
+            items = [i for i in items if not any(k in i for k in skip)]
+        return items, meta
+
+    def _do_for_each(self, step: dict) -> None:
+        """遍历列表，每项写入 state[item]（+state[index]）后执行嵌套 steps。
+
+        items: 可为 YAML 字面列表，或 state 变量名（如 "suppliers"）。
+        max: 可选，限制最大迭代数。
+        """
+        raw_items = step.get("items")
+        if isinstance(raw_items, str):
+            items = self.state.get(raw_items, [])
+        elif isinstance(raw_items, list):
+            items = raw_items
+        else:
+            items = []
+        max_items = step.get("max")
+        if max_items is not None:
+            items = items[: int(max_items)]
+        item_var = step.get("item", "item")
+        index_var = step.get("index")
+        nested = step.get("steps", [])
+        self._log(f"  for_each: {len(items)} 项")
+
+        for i, item in enumerate(items):
+            self.state[item_var] = item
+            if index_var:
+                self.state[index_var] = i
+            self._log(f"  ── [{i}] {item} ──")
+            self._run_steps(nested)
+
+    def _do_loop_until(self, step: dict) -> None:
+        """循环执行嵌套 steps，直到终止条件满足或达到 max_rounds。
+
+        终止条件（三选一）：
+          - until_state:   {key: value} 全部匹配（如 {done: true}）
+          - until_var:     state[key] 为真
+          - until_handler: 平台 handler 返回真值（如 gaode pricing_loop_done）
+        """
+        max_rounds = int(step.get("max_rounds", 10))
+        until_state = step.get("until_state")
+        until_var = step.get("until_var")
+        until_handler = step.get("until_handler")
+        nested = step.get("steps", [])
+
+        for r in range(max_rounds):
+            self._log(f"  ↻ 循环第 {r + 1}/{max_rounds} 轮")
+            self._run_steps(nested)
+            if self._loop_done(until_state, until_var, until_handler, step):
+                self._log("  ✓ 循环终止条件满足，结束")
+                return
+        self._log(f"  ⚠ 循环达到上限 {max_rounds} 轮")
+
+    def _loop_done(self, until_state, until_var, until_handler, step: dict) -> bool:
+        if until_handler:
+            fn = self._platform_step_handlers.get(until_handler)
+            if fn is None:
+                raise StepFailed(f"loop_until: 未知 until_handler {until_handler}")
+            return bool(fn(self, step))
+        if until_var:
+            return bool(self.state.get(until_var))
+        if until_state:
+            return all(self.state.get(k) == v for k, v in until_state.items())
+        return False
+
+    def _do_subflow(self, step: dict) -> None:
+        """加载子流程 YAML（file 相对当前 flow 目录解析）并内联执行。
+
+        与主流程共享同一 ctx / stats / 截图编号，统计自动归并。
+        """
+        file = step.get("file", "")
+        if not file:
+            raise StepFailed("subflow: 缺少 file")
+        path = Path(file)
+        if not path.is_absolute():
+            path = self._flow_dir / file
+        if not path.exists():
+            raise StepFailed(f"subflow: 文件不存在 {path}")
+
+        with open(path, "r", encoding="utf-8") as f:
+            sub = self._deep_resolve(self.vars, f.read())
+        name = sub.get("name", path.name)
+        self._log(f"── 子流程: {name} ──")
+        self._run_steps(sub.get("steps", []))
+
+    def _do_verify(self, step: dict) -> None:
+        """后置校验：expect_state（状态断言）/ handler（平台校验器）/ activity_prefix（ADB 前台 Activity）。
+
+        校验失败抛 StepFailed（可被 optional 跳过）。
+        """
+        expect = step.get("expect_state")
+        if expect:
+            for k, v in expect.items():
+                if self.state.get(k) != v:
+                    raise StepFailed(
+                        f"verify 失败: state[{k}]={self.state.get(k)!r} != {v!r}"
+                    )
+            self._log("  ✓ verify: 状态符合预期")
+            return
+
+        handler = step.get("handler")
+        if handler:
+            fn = self._platform_step_handlers.get(handler)
+            if fn is None:
+                raise StepFailed(f"verify: 未知 handler {handler}")
+            if fn(self, step) is False:
+                raise StepFailed(f"verify 失败: handler {handler}")
+            self._log(f"  ✓ verify: {handler} 通过")
+            return
+
+        activity = step.get("activity_prefix")
+        if activity:
+            from collector.quality.state_verifier import verify_activity
+            if not verify_activity(self.adb, activity):
+                raise StepFailed(f"verify 失败: activity={activity}")
+            self._log(f"  ✓ verify: activity {activity}")
+            return
+
+        raise StepFailed("verify: 缺少 expect_state / handler / activity_prefix")
+
+    def _render(self, text: str) -> str:
+        """运行时模板渲染：`{{.<Key>}}` → vars_，`{{.S.<key>}}` → state。"""
+        if not text or "{{." not in text:
+            return text
+
+        def _replace(m):
+            key = m.group(1)
+            if key.startswith("S."):
+                return str(self.state.get(key[2:], m.group(0)))
+            return str(self.vars.get(key, m.group(0)))
+
+        return re.sub(r"\{\{.([\w.]+)\}\}", _replace, text)
+
+    # ------------------------------------------------------------------
     # VLM helpers
     # ------------------------------------------------------------------
 
@@ -458,30 +739,29 @@ class FlowEngine:
                 continue
             self.stats["vlm_calls"] += 1
             t0 = time.time()
-            result = self.grounder.ground(image_path, d, screen_w=sw, screen_h=sh,
-                                           ref_image=ref_image, ref_images=ref_images)
+            # WS-2：走 domain/vision 结构化结果（GroundingResult）
+            result = self.ctx.vision.ground(image_path, d, screen_w=sw, screen_h=sh,
+                                            ref_image=ref_image, ref_images=ref_images)
             elapsed = time.time() - t0
 
             # Check SELECTED before attempting click
-            if result.get("selected"):
+            if result.selected:
                 self._log(
                     f"  ✓ VLM 判断: 已选中，跳过点击 "
                     f"(attempt {attempt + 1}, {elapsed:.1f}s)"
                 )
                 return None
 
-            if result.get("found"):
-                bbox = result.get("bbox", [0, 0, 0, 0])
-                center = result.get("center", [0, 0])
-                if bbox and bbox != [0, 0, 0, 0] and center:
-                    cx, cy = center[0], center[1]
-                    self._log(
-                        f"  ✓ VLM bbox={bbox} center=({cx},{cy}) "
-                        f"(attempt {attempt + 1}, {elapsed:.1f}s)"
-                    )
-                    self._annotate(image_path, step_tag, bbox, cx, cy, attempt)
-                    self.adb.click(cx, cy)
-                    return (cx, cy)
+            if result.has_geometry:
+                bbox = result.bbox
+                cx, cy = result.center
+                self._log(
+                    f"  ✓ VLM bbox={bbox} center=({cx},{cy}) "
+                    f"(attempt {attempt + 1}, {elapsed:.1f}s)"
+                )
+                self._annotate(image_path, step_tag, bbox, cx, cy, attempt)
+                self.adb.click(cx, cy)
+                return (cx, cy)
 
             self.stats["vlm_failures"] += 1
 
@@ -494,11 +774,11 @@ class FlowEngine:
         return self._vlm_ground_and_click(shot, desc, alts, tag,
                                            ref_image=ref_image, ref_images=ref_images)
 
-    def _vlm_ground_ref(self, shot, desc, ref_image=None, ref_images=None) -> dict:
+    def _vlm_ground_ref(self, shot, desc, ref_image=None, ref_images=None):
         sw, sh = self._screen_size
         self.stats["vlm_calls"] += 1
-        return self.grounder.ground(shot, desc, screen_w=sw, screen_h=sh,
-                                     ref_image=ref_image, ref_images=ref_images)
+        return self.ctx.vision.ground(shot, desc, screen_w=sw, screen_h=sh,
+                                      ref_image=ref_image, ref_images=ref_images)
 
     def _resolve_ref(self, path: str | None) -> str | None:
         if not path:
@@ -527,8 +807,8 @@ class FlowEngine:
     def _verify_page(self, image_path: str, expected: str) -> str:
         """Classify current page via VLM."""
         self.stats["vlm_calls"] += 1
-        result = self.grounder.classify_page(image_path)
-        page_type = result.get("page_type", "unknown")
+        result = self.ctx.vision.classify_page(image_path)
+        page_type = result.page_type or "unknown"
         self._log(f"  📄 页面分类: {page_type}")
         return page_type
 
@@ -562,50 +842,30 @@ class FlowEngine:
 
     @property
     def _screen_size(self) -> tuple[int, int]:
-        sz = self.adb.screen_size
-        if sz is not None:
-            return sz
-        raise RuntimeError("无法获取屏幕尺寸")
+        return self.ctx.screen_size
 
     def _screenshot(self, name: str, save: bool | None = None) -> str:
         """截图。save=None: debug 模式保存到 output/screenshots，collect 模式存临时目录。"""
         self._shot_seq += 1
-        if save is None:
-            save = self.debug_mode
-        if save:
-            target = self.output_dir / "screenshots"  # 裸截图子文件夹
-            target.mkdir(parents=True, exist_ok=True)
-        else:
-            target = self.scratch_dir or self.output_dir
-        path = str(target / f"{self._shot_seq:02d}_{name}.jpg")
-        for attempt in range(3):
-            if self.adb.get_screenshot(path):
-                return path
-            self._log(f"  ⚠ 截图失败，重试 {attempt + 1}/3")
-            self._wait(0.5, "short_wait")
-        raise StepFailed(f"截图失败: {name}")
+        path = self.ctx.capture(f"{self._shot_seq:02d}_{self._render(name)}", save=save)
+        if path is None:
+            raise StepFailed(f"截图失败: {name}")
+        return path
 
     def _annotate(self, image_path, step, bbox, cx, cy, attempt=0):
         if not self.debug_mode:
             return  # 标记图仅 debug 模式输出
-        anno_dir = self.output_dir / "annotations"  # 标记图子文件夹
-        anno_dir.mkdir(parents=True, exist_ok=True)
         stem = Path(image_path).stem
         tag = f"{stem}_attempt{attempt}" if attempt else stem
-        try:
-            img = Image.open(image_path)
-            if img.mode in ("RGBA", "P", "LA", "PA"):
-                img = img.convert("RGB")
-            draw = ImageDraw.Draw(img)
+
+        def _draw(draw):
             draw.rectangle(bbox, outline=self._ANNO_BBOX, width=4)
             r = 20
             draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=self._ANNO_DOT, width=4)
             draw.line((cx - r - 10, cy, cx + r + 10, cy), fill=self._ANNO_DOT, width=3)
             draw.line((cx, cy - r - 10, cx, cy + r + 10), fill=self._ANNO_DOT, width=3)
-            img.save(anno_dir / f"{tag}.png", "PNG")
-            self._log(f"  📸 标注: {anno_dir / tag}.png")
-        except Exception as e:
-            self._log(f"  ⚠ 标注失败: {e}")
+
+        self.ctx.annotate(image_path, tag, _draw)
 
     def _log(self, msg: str) -> None:
         if self.verbose:

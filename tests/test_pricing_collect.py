@@ -1,16 +1,19 @@
 """
-计价采集子流程 Mock 测试
+计价采集测试（WS-1 P3 重构版，无硬编码 FSM）
 ============================================================================
 
-测试 RidePricingFSM 的核心逻辑:
+RidePricingFSM 已删除，计价采集由 YAML 子流程表达：
+  subflows/pricing_collect_gaode.yaml + subflows/detail_capture_gaode.yaml
 
-  打车页 → S1(全选经济) → S2(识别供应商) →
-    ┌─ S3a(点?进入计价页) → S3c(详细计价规则) ─┐
-    │  工作日下滑→回顶→休息日下滑→返回×2          │  循环 2 个
-    └───────────────────────────────────────────┘
+覆盖：
+  - Suite 1: S2 响应解析（supplier_parse 单一实现）+ RES-01 结果整理
+  - Suite 2: v2 端到端（导航 + 计价子流程，全 mock）
+  - Suite 3: 平台注册表 / 新平台零侵入
+  - Suite 4: debug/collect 输出模式 + 耗时统计
+  - Suite 5: 真实 VLM 素材验证（可选）
+  - Suite 6: 真实设备 v2 全流程（可选）
 
 用法:
-  # Mock 测试 (无需设备/API)
   .venv/bin/python tests/test_pricing_collect.py
 
   # 真实 VLM + 设备测试
@@ -28,11 +31,10 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
 from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock, call, patch
+from unittest.mock import MagicMock, patch
 
 _THIS_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _THIS_DIR.parent
@@ -40,147 +42,122 @@ _PROJECT_ROOT = _THIS_DIR.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+from collector.infrastructure.device.adb_utils import MockAdbTools
+
+
+class _MockAdbFixed(MockAdbTools):
+    """MockAdbTools + 固定屏幕尺寸（避免 1x1 占位截图覆盖 image_info）。"""
+
+    @property
+    def screen_size(self):
+        return (1080, 2400)
+
+
+def _hit(x=100, y=200):
+    return {"element": "x", "bbox": [x - 50, y - 50, x + 50, y + 50], "center": [x, y],
+            "conf": 0.9, "found": True, "selected": None, "reason": None, "raw_response": ""}
+
+
+def _miss():
+    return {"element": "x", "bbox": None, "center": None, "conf": 0.0,
+            "found": False, "selected": None, "reason": "not found", "raw_response": ""}
+
 
 # ======================================================================
-# Suite 1: 纯逻辑测试 (不需要任何 mock)
+# Suite 1: 纯逻辑测试
 # ======================================================================
 
 def test_s2_parse_json_array():
-    """S2: VLM 返回标准 JSON 数组"""
-    raw = '```json\n["快车", "特惠快车", "优酷快车"]\n```'
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
+    """S2: VLM 返回标准 JSON 数组（代码块剥离；关键词过滤后保留目标运力商）"""
+    from collector.platform.gaode.supplier_parse import parse_suppliers_response
 
-    # 模拟 _s2_list_suppliers 的解析逻辑
-    cleaned = raw
-    for m in ("```json", "```"):
-        if cleaned.startswith(m):
-            cleaned = cleaned[len(m):].strip()
-    if cleaned.endswith("```"):
-        cleaned = cleaned[:-3].strip()
-    parsed = json.loads(cleaned)
-    assert isinstance(parsed, list)
-    assert "快车" in parsed
-    assert "特惠快车" in parsed
-    return "PASS ✓", parsed
+    suppliers, ended = parse_suppliers_response('```json\n["曹操出行", "阳光出行"]\n```')
+    assert suppliers == ["曹操出行", "阳光出行"], suppliers
+    assert ended is False
+    return "PASS ✓"
 
 
 def test_s2_parse_excludes_taxi_and_youxiang():
     """S2/CAP-08/09: 排除快车/拼车/出租车/的士/优享等非目标运力商"""
-    raw = '["曹操出行", "快车", "出租车", "北京的士", "北京新出租", "特惠快车", "优享", "拼车", "阳光出行"]'
-    from collector.platform.gaode.ride_pricing import _SKIP_KEYWORDS
+    from collector.platform.gaode.supplier_parse import parse_suppliers_response
 
-    cleaned = raw.strip()
-    parsed = json.loads(cleaned)
-    suppliers = [n for n in parsed if not any(kw in n for kw in _SKIP_KEYWORDS)]
+    suppliers, _ = parse_suppliers_response(
+        '["曹操出行", "快车", "出租车", "北京的士", "北京新出租", "特惠快车", "优享", "拼车", "阳光出行"]'
+    )
     assert "曹操出行" in suppliers
     assert "阳光出行" in suppliers
-    assert "快车" not in suppliers
-    assert "特惠快车" not in suppliers
-    assert "拼车" not in suppliers
-    assert "出租车" not in suppliers
-    assert "北京的士" not in suppliers
-    assert "北京新出租" not in suppliers
-    assert "优享" not in suppliers
-    return "PASS ✓", suppliers
+    for bad in ("快车", "特惠快车", "拼车", "出租车", "北京的士", "北京新出租", "优享"):
+        assert bad not in suppliers, bad
+    return "PASS ✓"
 
 
 def test_s2_parse_line_by_line_fallback():
     """S2: JSON 解析失败时回退到逐行提取"""
-    raw = """1. 快车
-2. 特惠快车
-3. 优选快车"""
+    from collector.platform.gaode.supplier_parse import parse_suppliers_response
 
-    import re
-    from collector.platform.gaode.ride_pricing import _SKIP_SUPPLIERS
-
-    suppliers = []
-    for line in raw.split("\n"):
-        line = re.sub(r'^[\d\.\、\)）\-\s]+', '', line.strip())
-        line = line.strip().strip('"').strip("'").strip(",")
-        if line and len(line) <= 30 and not any(kw in line for kw in _SKIP_SUPPLIERS):
-            if len(line) >= 2 and line not in suppliers:
-                suppliers.append(line)
-    assert len(suppliers) == 3
-    assert "快车" in suppliers
-    return "PASS ✓", suppliers
+    suppliers, ended = parse_suppliers_response("1. 曹操出行\n2. 阳光出行")
+    assert len(suppliers) == 2
+    assert "曹操出行" in suppliers and "阳光出行" in suppliers
+    assert ended is False
+    return "PASS ✓"
 
 
 def test_s2_parse_empty():
     """S2: VLM 返回空数组"""
-    raw = '[]'
-    parsed = json.loads(raw)
-    assert parsed == []
-    return "PASS ✓", []
+    from collector.platform.gaode.supplier_parse import parse_suppliers_response
+
+    suppliers, ended = parse_suppliers_response("[]")
+    assert suppliers == []
+    assert ended is False
+    return "PASS ✓"
+
+
+def test_s2_parse_cap09_dict_format():
+    """CAP-09: 新 dict 格式（suppliers + economy_ended）+ 关键词过滤"""
+    from collector.platform.gaode.supplier_parse import parse_suppliers_response
+
+    suppliers, ended = parse_suppliers_response(
+        '{"suppliers": ["曹操出行", "快车", "阳光出行"], "economy_ended": true}'
+    )
+    assert suppliers == ["曹操出行", "阳光出行"], suppliers
+    assert ended is True
+
+    # 旧数组格式 → economy_ended=False，全被过滤
+    suppliers2, ended2 = parse_suppliers_response('["快车", "特惠快车", "拼车"]')
+    assert suppliers2 == [] and ended2 is False
+
+    # 空响应/非法 → ([], False)
+    suppliers3, ended3 = parse_suppliers_response("")
+    assert suppliers3 == [] and ended3 is False
+    return "PASS ✓"
 
 
 def test_extract_center_from_bbox_and_center():
-    """_extract_center: 同时有 bbox 和 center"""
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    # 需要实例才能调用 _extract_center, 但它不是 static
-    # 我们直接用同样逻辑
-    result = {"bbox": [100, 200, 300, 400], "center": [200, 300]}
-    bbox = result.get("bbox")
-    center = result.get("center")
-    if bbox and bbox != [0, 0, 0, 0] and center:
-        assert center == [200, 300]
+    """GroundingResult center 语义：bbox+center 同时存在（结构化已归一化）"""
+    from collector.domain.vision.models import GroundingResult
+    r = GroundingResult(element="x", found=True, bbox=[100, 200, 300, 400],
+                        center=(200, 300), confidence=0.9)
+    assert r.has_geometry is True
+    assert r.center == (200, 300)
     return "PASS ✓"
 
 
 def test_extract_center_only_center():
-    """_extract_center: 只有 center 没有 bbox"""
-    result = {"bbox": [0, 0, 0, 0], "center": [500, 600]}
-    bbox = result.get("bbox")
-    center = result.get("center")
-    ok = (bbox and bbox != [0, 0, 0, 0] and center)
-    if not ok and center and center != [0, 0]:
-        # fallback: use center directly
-        assert center == [500, 600]
+    """GroundingResult center-only（bbox 缺失 → has_geometry=False，center 保留）"""
+    from collector.domain.vision.models import GroundingResult
+    r = GroundingResult(element="x", found=True, center=(500, 600))
+    assert r.center == (500, 600)
+    assert r.has_geometry is False
     return "PASS ✓"
 
 
 def test_extract_center_none():
-    """_extract_center: bbox 全零, center 也是 [0,0]"""
-    result = {"bbox": [0, 0, 0, 0], "center": [0, 0]}
-    bbox = result.get("bbox")
-    center = result.get("center")
-    ok = (bbox and bbox != [0, 0, 0, 0] and center)
-
-    # center=[0,0] is sentinel → should NOT be extracted
-    if not ok:
-        if center and center != [0, 0]:
-            pass  # would use center
-        else:
-            center = None  # correctly rejected
-    assert center is None
+    """GroundingResult：全零几何归一化为 None（适配器语义，无盲点击）"""
+    from collector.infrastructure.vision.adapters import grounding_result_from_dict
+    r = grounding_result_from_dict({"element": "x", "bbox": [0, 0, 0, 0], "center": [0, 0]})
+    assert r.center is None
+    assert r.bbox is None
     return "PASS ✓"
-
-
-def test_detect_end_marker():
-    """CAP-01: _detect_end_marker 解析 LLM 的 YES/NO 响应，并计入 vlm_calls."""
-    import tempfile
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    with tempfile.TemporaryDirectory() as tmp:
-        fsm = RidePricingFSM(
-            adb=MagicMock(), grounder=MagicMock(), supplier="x",
-            profile_cfg={}, output_dir=str(Path(tmp) / "out"), verbose=False,
-        )
-        fsm.stats["vlm_calls"] = 0
-
-        # YES → 出现「预约用车」
-        fsm.grounder.query_text.return_value = {"raw_response": "YES，出现了蓝色预约用车", "success": True}
-        assert fsm._detect_end_marker("x.jpg") is True
-        assert fsm.stats["vlm_calls"] == 1
-
-        # NO → 未出现
-        fsm.grounder.query_text.return_value = {"raw_response": "NO，未出现预约用车", "success": True}
-        assert fsm._detect_end_marker("x.jpg") is False
-        assert fsm.stats["vlm_calls"] == 2
-    return "PASS ✓"
-
-
 
 
 def test_screenshot_organizer():
@@ -254,701 +231,100 @@ def test_screenshot_organizer():
     return "PASS ✓"
 
 
-
-
-def test_page_unchanged():
-    """CAP-05: _page_unchanged 本地像素比对 — 相同页面 True，不同页面 False，缺文件 False."""
-    import tempfile
-
-    from PIL import Image
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    with tempfile.TemporaryDirectory() as tmp:
-        tmp = Path(tmp)
-        fsm = RidePricingFSM(adb=MagicMock(), grounder=MagicMock(), supplier="x",
-                             profile_cfg={}, output_dir=str(tmp / "out"), verbose=False)
-        a = tmp / "a.jpg"
-        b = tmp / "b.jpg"
-        c = tmp / "c.jpg"
-        Image.new("RGB", (200, 400), (200, 200, 200)).save(a)
-        Image.new("RGB", (200, 400), (200, 200, 200)).save(b)  # 与 a 完全相同
-        Image.new("RGB", (200, 400), (0, 0, 0)).save(c)         # 与 a 完全不同
-
-        assert fsm._page_unchanged(str(a), str(b)) is True
-        assert fsm._page_unchanged(str(a), str(c)) is False
-        assert fsm._page_unchanged(str(a), str(tmp / "missing.jpg")) is False
-    return "PASS ✓"
-
-
-def test_scroll_to_bottom_marker_or_stable():
-    """CAP-05: 退出条件 = 出现「预约用车」**或**页面不再变化。
-
-    1) 出现标记即停（页面比对不再需要）;
-    2) 未出现标记但页面无变化 → 停止;
-    3) 两者都未满足 → 达上限返回 False。
-    """
-    import tempfile
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    def _mkfsm(max_swipes):
-        mock_adb = MagicMock()
-        type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
-        fsm = RidePricingFSM(
-            adb=mock_adb, grounder=MagicMock(), supplier="x",
-            profile_cfg={"collection": {"max_detail_swipes": max_swipes}},
-            output_dir=str(Path(tempfile.gettempdir()) / "cap05_out"),
-            verbose=False,
-        )
-        fsm._shot = MagicMock(side_effect=lambda name: f"/fake/{name}.jpg")
-        return fsm
-
-    # 1) 出现「预约用车」→ 停止（标记命中时不再做页面比对）
-    fsm1 = _mkfsm(12)
-    fsm1._detect_end_marker = MagicMock(side_effect=[False, True])
-    fsm1._page_unchanged = MagicMock(return_value=False)
-    assert fsm1._scroll_to_bottom("工作日", "飞嘀打车") is True
-    assert fsm1._detect_end_marker.call_count == 2, fsm1._detect_end_marker.call_count
-    assert fsm1._page_unchanged.call_count == 1, fsm1._page_unchanged.call_count  # 仅 i=0
-
-    # 2) 未出现标记但页面无变化 → 停止
-    fsm2 = _mkfsm(12)
-    fsm2._detect_end_marker = MagicMock(return_value=False)
-    fsm2._page_unchanged = MagicMock(side_effect=[False, True])
-    assert fsm2._scroll_to_bottom("休息日", "旗妙出行") is True
-    assert fsm2._page_unchanged.call_count == 2, fsm2._page_unchanged.call_count
-
-    # 3) 两者都未满足 → 达上限返回 False
-    fsm3 = _mkfsm(2)
-    fsm3._detect_end_marker = MagicMock(return_value=False)
-    fsm3._page_unchanged = MagicMock(return_value=False)
-    assert fsm3._scroll_to_bottom("工作日", "飞嘀打车") is False
-    assert fsm3._detect_end_marker.call_count == 2, fsm3._detect_end_marker.call_count
-    assert fsm3._page_unchanged.call_count == 2, fsm3._page_unchanged.call_count
-
-    # 4) CAP-10：滚动帧命名 scroll_0..N，无 check 重复帧
-    shot_names = [c.args[0] for c in fsm1._shot.call_args_list]
-    assert not any("check" in n for n in shot_names), shot_names
-    assert "工作日_scroll_0_飞嘀打车" in shot_names, shot_names
-    return "PASS ✓"
-
-
-
-def test_collect_suppliers_loop():
-    """CAP-06: 采集循环 — 达到目标数 或 经济型采完（列表无新运力商）即结束。
-
-    A) 经济型只有 3 个、目标 10 → 采完 3 个后因「无新运力商」退出（不达 10）;
-    B) 目标 2、列表给 3 个 → 采到 2 个即停（不采第 3 个、不滑动）;
-    C) 找不到问号的运力商被跳过，其余照常采集。
-    """
-    import tempfile
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    def _mkfsm():
-        mock_adb = MagicMock()
-        type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
-        fsm = RidePricingFSM(
-            adb=mock_adb, grounder=MagicMock(), supplier="经济型",
-            profile_cfg={}, output_dir=str(Path(tempfile.gettempdir()) / "cap06_out"),
-            verbose=False,
-        )
-        fsm._wait = MagicMock()
-        fsm._swipe_down = MagicMock()
-        fsm._s3c_collect_detail_rules = MagicMock(return_value=True)
-        return fsm
-
-    # A) 3 个运力商、目标 10 → 全部采完，经济型采完退出
-    fsm = _mkfsm()
-    fsm._s2_list_suppliers = MagicMock(side_effect=[(["快车", "特惠快车", "拼车"], False), ([], False), ([], False)])
-    fsm._s3a_tap_question = MagicMock(return_value=True)
-    collected = fsm._collect_suppliers(10, [])
-    assert collected == ["快车", "特惠快车", "拼车"], collected
-    # 列表采完下滑1次(s4_next) + 确认空列表下滑1次(s4_nomore) = 2 次
-    assert fsm._swipe_down.call_count == 2, fsm._swipe_down.call_count
-
-    # B) 目标 2、列表给 3 个 → 采到 2 个即停（不采第 3 个、不滑动）
-    fsm2 = _mkfsm()
-    fsm2._s2_list_suppliers = MagicMock(return_value=(["快车", "特惠快车", "拼车"], False))
-    fsm2._s3a_tap_question = MagicMock(return_value=True)
-    collected2 = fsm2._collect_suppliers(2, [])
-    assert collected2 == ["快车", "特惠快车"], collected2
-    assert fsm2._s3a_tap_question.call_count == 2, fsm2._s3a_tap_question.call_count
-    assert fsm2._swipe_down.call_count == 0, fsm2._swipe_down.call_count
-
-    # C) 找不到问号的运力商被跳过，其余照常采集
-    fsm3 = _mkfsm()
-    fsm3._s2_list_suppliers = MagicMock(side_effect=[(["快车", "特惠快车"], False), ([], False), ([], False)])
-    fsm3._s3a_tap_question = MagicMock(side_effect=[True, False])
-    collected3 = fsm3._collect_suppliers(10, [])
-    assert collected3 == ["快车"], collected3
-    assert fsm3._swipe_down.call_count == 2, fsm3._swipe_down.call_count
-
-    # D) 详细计价采集失败（S3c 返回 False）→ 不计入 collected
-    fsm4 = _mkfsm()
-    fsm4._s2_list_suppliers = MagicMock(side_effect=[(["快车", "特惠快车"], False), ([], False), ([], False)])
-    fsm4._s3a_tap_question = MagicMock(return_value=True)
-    fsm4._s3c_collect_detail_rules = MagicMock(side_effect=[True, False])
-    collected4 = fsm4._collect_suppliers(10, [])
-    assert collected4 == ["快车"], collected4  # 特惠快车 S3c 失败不计入
-
-    # E) economy_ended=True 且不足 10 → 采完当前列表后停止（不再下滑）
-    fsm5 = _mkfsm()
-    fsm5._s2_list_suppliers = MagicMock(return_value=(["快车", "特惠快车"], True))
-    fsm5._s3a_tap_question = MagicMock(return_value=True)
-    collected5 = fsm5._collect_suppliers(10, [])
-    assert collected5 == ["快车", "特惠快车"], collected5
-    assert fsm5._swipe_down.call_count == 0, fsm5._swipe_down.call_count
-
-    # F) economy_ended=True 且无新运力商 → 立即停止（不确认下滑）
-    fsm6 = _mkfsm()
-    fsm6._s2_list_suppliers = MagicMock(return_value=([], True))
-    collected6 = fsm6._collect_suppliers(10, [])
-    assert collected6 == [], collected6
-    assert fsm6._swipe_down.call_count == 0, fsm6._swipe_down.call_count
-    return "PASS ✓"
-
-
-
-def test_swipe_down_screenshot_and_half_distance():
-    """CAP-07: 打车页滑动 — 每次滑动都截图，且距离为 1/6 屏（原 1/3 屏的一半）。"""
-    import tempfile
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    mock_adb = MagicMock()
-    type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
-    fsm = RidePricingFSM(
-        adb=mock_adb, grounder=MagicMock(), supplier="x",
-        profile_cfg={}, output_dir=str(Path(tempfile.gettempdir()) / "swipe_out"),
-        verbose=False,
-    )
-    fsm._shot = MagicMock(return_value="/fake/s4_next.jpg")
-    fsm._wait = MagicMock()
-
-    fsm._swipe_down("s4_next")
-
-    # 每次滑动都截图
-    fsm._shot.assert_called_once_with("s4_next")
-
-    # 距离 = sh // 6 = 2400 // 6 = 400（原 1/3 屏 800 的一半）
-    args = mock_adb.slide.call_args.args
-    x1, y1, x2, y2 = args[0], args[1], args[2], args[3]
-    assert y1 - y2 == 400, f"滑动距离应 sh//6=400, 实际 {y1 - y2}"
-    assert x1 == x2 == 540, (x1, x2)
-    assert y1 == 1600 and y2 == 1200, (y1, y2)
-    return "PASS ✓"
-
-
-
-def test_tap_back_arrow_deterministic():
-    """PERF-02: 返回导航确定性化 — 直接 adb.back()，不调 VLM ground/click，等待 back_wait。"""
-    import tempfile
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    mock_adb = MagicMock()
-    mock_grounder = MagicMock()
-    fsm = RidePricingFSM(
-        adb=mock_adb, grounder=mock_grounder, supplier="x",
-        profile_cfg={"timing": {"back_wait": 0.0}},
-        output_dir=str(Path(tempfile.gettempdir()) / "back_out"),
-        verbose=False,
-    )
-    fsm._shot = MagicMock(return_value="/fake/detail_exit.jpg")
-    fsm._wait = MagicMock()
-
-    fsm._tap_back_arrow("detail_exit")
-
-    mock_adb.back.assert_called_once()
-    mock_grounder.ground.assert_not_called()
-    mock_adb.click.assert_not_called()
-    fsm._wait.assert_called_once_with(0.0, "back_wait")
-    fsm._shot.assert_called_once_with("detail_exit")
-    return "PASS ✓"
-
-
-
-def test_tab_coordinate_reuse():
-    """PERF-03: 标签坐标首次 LLM 记录后复用，后续不再调 LLM/截图，直接点击。"""
-    import tempfile
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    mock_adb = MagicMock()
-    type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
-    mock_grounder = MagicMock()
-    mock_grounder.ground.return_value = {
-        "found": True, "center": [500, 300], "bbox": [450, 250, 550, 350],
-    }
-    fsm = RidePricingFSM(
-        adb=mock_adb, grounder=mock_grounder, supplier="x",
-        profile_cfg={"timing": {"tab_wait": 0.0}},
-        output_dir=str(Path(tempfile.gettempdir()) / "tab_out"),
-        verbose=False,
-    )
-    fsm._shot = MagicMock(return_value="/fake/detail_before.jpg")
-    fsm._wait = MagicMock()
-    fsm._scroll_to_bottom = MagicMock(return_value=True)
-
-    fsm._tap_tab_and_scroll("工作日", "曹操出行")
-    fsm._tap_tab_and_scroll("工作日", "火箭出行")
-
-    # 首次 ground 一次并缓存，第二次复用坐标直接点击（不再截图 detail_before）
-    assert mock_grounder.ground.call_count == 1, mock_grounder.ground.call_count
-    assert mock_adb.click.call_count == 2, mock_adb.click.call_count
-    before_shots = [c.args[0] for c in fsm._shot.call_args_list if "detail_before" in str(c.args[0])]
-    assert len(before_shots) == 1, before_shots  # 仅首次截 detail_before
-    assert fsm._tab_coords.get("工作日") == (500, 300), fsm._tab_coords
-    return "PASS ✓"
-
-
-
-def test_s3a_no_question_no_crash():
-    """CAP-08: 找不到问号时 _s3a_tap_question 返回 False，不崩溃、不点击。"""
-    import tempfile
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    mock_adb = MagicMock()
-    type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
-    mock_grounder = MagicMock()
-    mock_grounder.ground.return_value = {"found": False, "center": None, "bbox": [0, 0, 0, 0]}
-    fsm = RidePricingFSM(
-        adb=mock_adb, grounder=mock_grounder, supplier="x",
-        profile_cfg={}, output_dir=str(Path(tempfile.gettempdir()) / "s3a_out"),
-        verbose=False,
-    )
-    fsm._shot = MagicMock(return_value="/fake/q.jpg")
-    fsm._wait = MagicMock()
-
-    assert fsm._s3a_tap_question("北京新出租") is False
-    mock_adb.click.assert_not_called()
-    return "PASS ✓"
-
-
-
-def test_parse_s2_response():
-    """CAP-09: S2 响应解析 — 新 dict 格式(economy_ended) + 旧数组兼容 + 关键词过滤。"""
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    # 新格式：suppliers + economy_ended，快车被过滤
-    suppliers, ended = RidePricingFSM._parse_s2_response(
-        '{"suppliers": ["曹操出行", "快车", "阳光出行"], "economy_ended": true}'
-    )
-    assert suppliers == ["曹操出行", "阳光出行"], suppliers
-    assert ended is True
-
-    # 旧数组格式 → economy_ended=False，全被过滤
-    suppliers2, ended2 = RidePricingFSM._parse_s2_response('["快车", "特惠快车", "拼车"]')
-    assert suppliers2 == [], suppliers2
-    assert ended2 is False
-
-    # 空响应/非法 → ([], False)
-    suppliers3, ended3 = RidePricingFSM._parse_s2_response("")
-    assert suppliers3 == [] and ended3 is False
-    return "PASS ✓"
-
-
-
-def test_probe_not_saved_in_collect():
-    """CAP-10: collect 模式探针帧不落盘（进临时目录）；debug 模式照常保存。"""
-    import tempfile
-
-    from collector.infrastructure.device.adb_utils import MockAdbTools
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    # collect：探针帧不落盘
-    mock_adb = MockAdbTools()
-    out1 = Path(tempfile.gettempdir()) / "cap10_probe_collect"
-    fsm1 = RidePricingFSM(adb=mock_adb, grounder=MagicMock(), supplier="x",
-                          profile_cfg={}, output_dir=str(out1), mode="collect")
-    try:
-        probe = fsm1._probe("q_x")
-        assert not (out1 / "screenshots" / "q_x.jpg").exists(), "collect 探针帧不应落盘"
-        assert Path(probe).parent != out1 / "screenshots", "探针应在临时目录"
-
-        # select_all_after 必须落盘（result 冒泡页用）
-        save = fsm1._s1_screenshot("select_all_after")
-        assert Path(save).parent == out1 / "screenshots", "select_all_after 应落盘"
-        fsm1._s1_screenshot("select_all_before")  # 探针
-        assert not (out1 / "screenshots" / "select_all_before.jpg").exists()
-    finally:
-        fsm1.cleanup()
-
-    # debug：探针帧等价保存
-    out2 = Path(tempfile.gettempdir()) / "cap10_probe_debug"
-    fsm2 = RidePricingFSM(adb=MockAdbTools(), grounder=MagicMock(), supplier="x",
-                          profile_cfg={}, output_dir=str(out2), mode="debug")
-    try:
-        p2 = fsm2._probe("q_x")
-        assert Path(p2).parent == out2 / "screenshots", "debug 探针帧应保存"
-    finally:
-        fsm2.cleanup()
-    return "PASS ✓"
-
 # ======================================================================
-# Suite 2: FSM 完整流程 Mock 测试
+# Suite 2: v2 端到端（导航 + 计价子流程，全 mock）
 # ======================================================================
 
-def test_fsm_full_flow():
-    """Mock AdbTools + VLMGrounder, 验证 FSM 调用顺序.
+def test_v2_flow_end_to_end():
+    """运行真实 v2_gaode.yaml + 计价/详情子流程（全 mock）。
 
-    模拟: 打车页有 2 个供应商 (快车, 特惠快车), 全选经济未选中.
-
-    预期调用链:
-      1. S0: slide(上滑)
-      2. S1: ensure_all_selected(全选经济) → 幂等勾选 (SEL-01)
-      3. S2: query_text(识别供应商) → ["快车", "特惠快车"]
-      4. S3a[快车]: ground(点问号, ref=button_to_price.png) → click
-      5. S3c[快车]: ground(查看详细计价规则) → click
-         → ground(工作日tab) → click → 每次滑动后 query_text(预约用车?) → 出现或页面无变化即停 → slide×3(回顶)
-         → ground(休息日tab) → click → 每次滑动后 query_text(预约用车?) → 出现或页面无变化即停
-         → ground(返回箭头) → click → ground(返回箭头) → click
-      6. S3a[特惠快车]: 同上
-      7. S3c[特惠快车]: 同上
+    验证：导航 → subflow(select_all → verify → loop(extract_list → for_each →
+    detail_capture) → organize) 全链路；标签坐标缓存（PERF-03）；截图命名与 result 聚合兼容。
     """
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
+    import tempfile as _tf
 
-    # ── 构建 Mock ──
-    mock_adb = MagicMock()
-    type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
+    from collector.platform.gaode.platform import build_platform
 
-    mock_grounder = MagicMock()
+    v2_path = _PROJECT_ROOT / "collector/platform/gaode/flows/v2_gaode.yaml"
+    assert v2_path.exists(), v2_path
 
-    # S1 全选: 第一轮未选中 → 返回坐标
-    mock_grounder.ground.side_effect = _build_ground_side_effect()
+    def _ground_side_effect(image_path, element_desc, **kwargs):
+        d = str(element_desc)
+        if "查看详细计价规则" in d:
+            return _hit(540, 1800)
+        if "问号" in d or "'?'" in d:
+            return _hit(800, 1200)
+        if "工作日" in d or "休息日" in d:
+            return _hit(400, 150)
+        if "候选" in d:
+            return _hit(540, 800)
+        if "你要去哪儿" in d or "输入目的地" in d:
+            return _hit(540, 500)
+        if "上车点" in d:
+            return _hit(540, 400)
+        if "搜索" in d:
+            return _hit(950, 200)
+        if "打车" in d:
+            return _hit(540, 2100)
+        return _miss()
 
-    # S2 查询供应商列表
-    mock_grounder.query_text.side_effect = _build_query_text_side_effect()
+    def _query_side_effect(image_path, prompt):
+        p = str(prompt)
+        if "预约用车" in p:
+            return {"raw_response": "NO", "success": True}
+        return {"raw_response": '{"suppliers": ["曹操出行", "阳光出行"], "economy_ended": true}',
+                "success": True}
 
-    # Profile config
-    profile_cfg = _build_profile_cfg()
+    platform = build_platform()
+    profile_cfg = platform.load_profile()
 
-    from collector.domain.checkbox import SelectAllTarget
+    with _tf.TemporaryDirectory() as tmp:
+        adb = _MockAdbFixed()
+        grounder = MagicMock()
+        grounder.ground.side_effect = _ground_side_effect
+        grounder.query_text.side_effect = _query_side_effect
 
-    # ── 执行 ──
-    fsms = []  # track created FSMs for stats
-    _checked_target = SelectAllTarget(
-        target_found=True, target_label="全选经济",
-        label_bbox=[800, 400, 880, 480],
-        checkbox_bbox=[900, 410, 960, 470],
-        checkbox_center=(930, 440),
-        relation_valid=True, state="checked",
-    )
-
-    with patch('collector.platform.gaode.select_all.ensure_all_selected',
-               return_value=_checked_target) as mock_ensure:
-        with patch('collector.platform.gaode.ride_pricing.AdbTools', return_value=mock_adb):
-            with patch('collector.platform.gaode.ride_pricing.VLMGrounder', return_value=mock_grounder):
-                # CAP-05: 页面无变化判定在 Mock 中固定 False，退出由「预约用车」标记驱动
-                with patch.object(RidePricingFSM, "_page_unchanged", return_value=False) as mock_pu:
-                    # Patch the module-level adb/grounder in ride_pricing
-                    fsm = RidePricingFSM(
-                        adb=mock_adb,
-                        grounder=mock_grounder,
-                        supplier="经济型",
-                        profile_cfg=profile_cfg,
-                        output_dir="/tmp/test_output",
-                        verbose=False,
-                    )
-                    results = fsm.run()
-                    fsms.append(fsm)
-
-    assert mock_ensure.called, "S1 应调用 ensure_all_selected"
-
-    fsm = fsms[0]
-
-    # ── 验证 ──
-    print(f"\n  [Mock FSM] 截图数: {len(results)}")
-    print(f"  [Mock FSM] VLM 调用: ground={mock_grounder.ground.call_count}, "
-          f"query_text={mock_grounder.query_text.call_count}")
-
-    # 1. 必须有截图输出
-    assert len(results) > 0, "应至少产生 1 张截图"
-
-    # 2. S0 上滑
-    slide_calls = mock_adb.slide.call_args_list
-    assert len(slide_calls) >= 1, f"S0: 应至少 1 次上滑, 实际 {len(slide_calls)}"
-
-    # 3. S1 全选经济: 走 ensure_all_selected（目标锚定，不再整图 ground 判状态）
-    ground_calls = mock_grounder.ground.call_args_list
-
-    # 4. S2 供应商识别: query_text 应被调用
-    query_calls = mock_grounder.query_text.call_args_list
-    assert len(query_calls) >= 1, f"S2: query_text 至少 1 次, 实际 {len(query_calls)}"
-
-    # 4b. CAP-01: 详细计价页每次滑动后都调用 LLM 判断「预约用车」
-    marker_calls = [
-        c for c in query_calls
-        if len(c.args) > 1 and "预约用车" in str(c.args[1])
-    ]
-    print(f"  [Mock FSM] 「预约用车」LLM 检测: {len(marker_calls)} 次")
-    # 每个供应商: 工作日 4 次(i=0..3) + 休息日 3 次(i=0..2) = 7 次
-    assert len(marker_calls) == 14, \
-        f"应有 2 供应商 × 7 次「预约用车」检测, 实际 {len(marker_calls)}"
-
-    # 4c. CAP-01/CAP-05: 出现「预约用车」（或页面无变化）即终止滚动 → 滑动次数可精确预期
-    #     mock 中页面无变化=False, 由标记驱动: S0(1) + 2 × (工作日 4 + 回顶 3 + 休息日 3) = 21
-    assert len(slide_calls) == 21, \
-        f"「预约用车」出现应终止滚动, 预期 21 次滑动, 实际 {len(slide_calls)}"
-
-    # 4d. CAP-01: 检测到「预约用车」后触发回顶（上滑手势 y1<y2）
-    #     _scroll_to_top 每个供应商 × 工作日 3 次 = 6 次
-    up_swipes = [
-        c for c in slide_calls
-        if len(c.args) >= 4 and c.args[1] < c.args[3]
-    ]
-    print(f"  [Mock FSM] 检测到后回顶上滑: {len(up_swipes)} 次")
-    assert len(up_swipes) == 6, \
-        f"检测到「预约用车」后应回顶 2×3=6 次上滑, 实际 {len(up_swipes)}"
-
-    # 4e. CAP-05: 每次未命中标记时评估「页面无变化」（OR 退出条件）
-    #     工作日 i=0..2 共3次 + 休息日 i=0..1 共2次 = 5 次/供应商 → 10 次
-    print(f"  [Mock FSM] 页面无变化比对: {mock_pu.call_count} 次")
-    assert mock_pu.call_count == 10, \
-        f"未命中标记时应评估页面无变化, 预期 10 次, 实际 {mock_pu.call_count}"
-
-    # 4f. PERF-03: 工作日/休息日标签坐标仅首次 LLM 记录，后续复用（共 2 次 ground）
-    tab_grounds = [
-        c for c in ground_calls
-        if len(c.args) > 1 and ("工作日" in str(c.args[1]) or "休息日" in str(c.args[1]))
-    ]
-    print(f"  [Mock FSM] 标签定位 ground: {len(tab_grounds)} 次")
-    assert len(tab_grounds) == 2, \
-        f"标签坐标应仅首次记录(工作日+休息日各1次), 实际 {len(tab_grounds)}"
-
-    # 5. S3a 问号: ground 中应有 ref_image=button_to_price.png
-    question_calls = [
-        c for c in ground_calls
-        if c.kwargs.get("ref_image") and "button_to_price.png" in str(c.kwargs.get("ref_image"))
-    ]
-    print(f"  [Mock FSM] 问号点击 (ref=button_to_price.png): {len(question_calls)} 次")
-    assert len(question_calls) >= 2, \
-        f"应有 2 个供应商各 1 次问号点击, 实际 {len(question_calls)}"
-
-    # 6. 点击 (click) 应被多次调用
-    click_calls = mock_adb.click.call_args_list
-    assert len(click_calls) >= 4, f"click 至少 4 次, 实际 {len(click_calls)}"
-
-    # 7. 返回 (back) 应被调用 — 每个供应商的 2 次返回
-    #   (实际是先 ground 找返回箭头, 找不到才 fallback back key)
-    #   这里不做严格断言
-
-    # 8. 统计合并
-    assert fsm.stats["vlm_calls"] > 0, "VLM 调用统计应 > 0"
-
-    print(f"  [Mock FSM] ✓ 完整流程通过")
-    print(f"    - slide:   {len(slide_calls)} 次")
-    print(f"    - click:   {len(click_calls)} 次")
-    print(f"    - ground:  {len(ground_calls)} 次")
-    print(f"    - query:   {len(query_calls)} 次")
-    print(f"    - 截图:    {len(results)} 张")
-    return True
-
-
-def _build_profile_cfg() -> dict:
-    return {
-        "timing": {
-            "app_launch_wait": 3.0,
-            "after_input_wait": 1.0,
-            "after_tap_wait": 2.0,
-            "after_confirm_wait": 3.0,
-            "pricing_page_wait": 2.0,
-        },
-        "steps": {},
-        "collection": {
-            "scroll_duration_ms": 500,
-            "after_scroll_wait": 1.0,
-            "swipe_duration_ms": 400,
-            "max_suppliers": 2,
-            "max_detail_swipes": 12,
-            "max_scroll_rounds": 15,
-            "pricing_page_wait": 0.5,
-        },
-    }
-
-
-def _build_ground_side_effect():
-    """构建 ground() 的 side_effect, 按调用顺序返回不同结果.
-
-    调用顺序 (每个供应商):
-      S1-1: 全选经济第1轮 → 未选中, 返回坐标
-      S1-2: 全选 double check → 已选中
-      S3a: 点问号 → 找到, 返回坐标
-      S3c: 查看详细计价规则 → 找到, 返回坐标
-      S3c: 工作日 tab → 找到, 返回坐标
-      S3c: 休息日 tab → 找到, 返回坐标
-      S3c: 返回箭头(第一次) → 找到
-      S3c: 返回箭头(第二次) → 找到
-      ... 重复 2 个供应商
-    """
-
-    NOT_SELECTED = {
-        "element": "全选经济勾选框",
-        "bbox": [800, 400, 880, 480],
-        "center": [840, 440],
-        "found": True,
-        "selected": False,
-        "conf": 0.90,
-        "raw_response": "SELECTED=false\n<tool_call>...</tool_call>",
-    }
-
-    SELECTED = {
-        "element": "全选经济勾选框",
-        "bbox": [0, 0, 0, 0],
-        "center": None,
-        "found": False,
-        "selected": True,
-        "conf": 0.0,
-        "raw_response": "SELECTED=true\n<tool_call>...</tool_call>",
-    }
-
-    FOUND_AT = lambda x, y: {
-        "element": "target",
-        "bbox": [x - 30, y - 30, x + 30, y + 30],
-        "center": [x, y],
-        "found": True,
-        "selected": None,
-        "conf": 0.90,
-        "raw_response": "<tool_call>...</tool_call>",
-    }
-
-    # 每个供应商需要的 ground 调用:
-    #   1. S3a 点问号 → 找到
-    #   2. S3c 查看详细计价规则 → 找到
-    #   3. S3c 工作日 tab → 找到
-    #   4. S3c 休息日 tab → 找到
-    #   5. S3c 返回(1) → 找到
-    #   6. S3c 返回(2) → 找到
-    per_supplier = [FOUND_AT(500, 1800)] * 6
-
-    # S1 全选经济已改走 ensure_all_selected（SEL-01），不再调用 ground；
-    # (S2 用 query_text 不用 ground)
-    sequence = []
-    # 2 个供应商
-    for _ in range(2):
-        sequence.extend(per_supplier)
-
-    # 用迭代器
-    seq_iter = iter(sequence)
-
-    def side_effect(image_path, element_desc, screen_w, screen_h,
-                    ref_image=None, ref_images=None):
-        try:
-            return next(seq_iter)
-        except StopIteration:
-            return {
-                "element": element_desc,
-                "bbox": [500, 1000, 580, 1080],
-                "center": [540, 1040],
-                "found": True,
-                "selected": None,
-                "conf": 0.90,
-                "raw_response": "<tool_call>...</tool_call>",
-            }
-
-    return side_effect
-
-
-def _build_query_text_side_effect():
-    """构建 query_text 的 side_effect.
-
-    调用顺序:
-      S2-1: 识别供应商 → {"suppliers": ["曹操出行", "阳光出行"], "economy_ended": false}
-      S3c-工作日-scroll: 每次滑动后 LLM 判断「预约用车」→ NO, NO, NO, YES (i=0..3)
-      S3c-休息日-scroll: 每次滑动后 LLM 判断「预约用车」→ NO, NO, YES (i=0..2)
-      ... 重复 2 个供应商
-    """
-    SUPPLIERS_RESP = {
-        "raw_response": '{"suppliers": ["曹操出行", "阳光出行"], "economy_ended": false}',
-        "success": True,
-    }
-    NOT_MARKER = {"raw_response": "NO, 未出现预约用车", "success": True}
-    IS_MARKER = {"raw_response": "YES, 出现了蓝色预约用车", "success": True}
-
-    sequence = [SUPPLIERS_RESP]  # S2 只调用 1 次
-    # 每个供应商: 工作日每次滑动检测 + 休息日每次滑动检测
-    for _ in range(2):
-        sequence.extend([NOT_MARKER] * 3)  # 工作日 i=0,1,2 → 未出现
-        sequence.append(IS_MARKER)         # 工作日 i=3 → 出现「预约用车」，终止
-        sequence.extend([NOT_MARKER] * 2)  # 休息日 i=0,1 → 未出现
-        sequence.append(IS_MARKER)         # 休息日 i=2 → 出现「预约用车」，终止
-
-    seq_iter = iter(sequence)
-
-    def side_effect(image_path, prompt):
-        try:
-            return next(seq_iter)
-        except StopIteration:
-            return {"raw_response": "YES", "success": True}
-
-    return side_effect
-
-
-# ======================================================================
-# Suite 3: FlowEngine pricing_collect 编排测试
-# ======================================================================
-
-def test_flow_engine_pricing_collect_step():
-    """验证 FlowEngine 通过平台 step_handlers 委托 pricing_collect 给 RidePricingFSM."""
-    from collector.platform.gaode.platform import handle_pricing_collect
-    from collector.workflows.flow_engine import FlowEngine
-
-    mock_adb = MagicMock()
-    type(mock_adb).screen_size = PropertyMock(return_value=(1080, 2400))
-    mock_grounder = MagicMock()
-
-    # 写一个临时 YAML
-    import tempfile
-    yaml_content = """
-name: "test-pricing"
-version: "1"
-description: "test"
-steps:
-  - id: "collect"
-    type: "pricing_collect"
-    description: "计价采集"
-    supplier: "经济型"
-"""
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-        f.write(yaml_content)
-        tmp_path = f.name
-
-    try:
-        # 平台 handler 在调用时从 gaode.ride_pricing import RidePricingFSM，在此 patch
-        with patch('collector.platform.gaode.ride_pricing.RidePricingFSM') as MockFSM:
-            mock_fsm_instance = MagicMock()
-            mock_fsm_instance.stats = {"vlm_calls": 5, "vlm_failures": 0}
-            MockFSM.return_value = mock_fsm_instance
-
+        with patch("collector.platform.gaode.select_all.ensure_all_selected",
+                   return_value=MagicMock()):
+            engine = None
+            from collector.workflows.flow_engine import FlowEngine
             engine = FlowEngine(
-                adb=mock_adb,
-                grounder=mock_grounder,
-                flow_path=tmp_path,
-                output_dir="/tmp/test_engine",
-                verbose=False,
-                profile_cfg={"collection": {"max_suppliers": 2}},
-                platform_step_handlers={"pricing_collect": handle_pricing_collect},
+                adb=adb, grounder=grounder, flow_path=str(v2_path),
+                vars_={"Address": "北京西站", "Pickup": "西北旺万象汇"},
+                output_dir=str(Path(tmp) / "out"),
+                verbose=False, profile_cfg=profile_cfg,
+                platform_step_handlers=platform.step_handlers,
+                mode="debug",
             )
-            engine.run()
+            with patch("time.sleep"):   # 跳过真实等待，wait_seconds 仍累计
+                engine.run()
 
-            # 验证 RidePricingFSM 被创建并执行
-            assert MockFSM.called, "应创建 RidePricingFSM"
-            assert mock_fsm_instance.run.called, "应调用 RidePricingFSM.run()"
-
-            # 验证 stats 合并
-            assert engine.stats["vlm_calls"] == 5, \
-                f"stats 应合并, 预期 5, 实际 {engine.stats['vlm_calls']}"
-
-            print(f"  [FlowEngine] ✓ pricing_collect 通过平台 handler 正确委托")
-    finally:
-        Path(tmp_path).unlink()
+        # 1. 计价子流程执行：循环终止（economy_ended=true）且两个供应商都被处理
+        assert engine.state["_processed"] == {"曹操出行", "阳光出行"}, engine.state["_processed"]
+        assert engine.state["economy_ended"] is True
+        # 2. 全选状态被 verify 校验
+        assert engine.state["select_all_done"] is True
+        # 3. ground 描述渲染了供应商
+        descs = [c.args[1] for c in grounder.ground.call_args_list]
+        assert any("曹操出行" in d for d in descs), "缺少供应商模板渲染"
+        assert any("阳光出行" in d for d in descs), "缺少供应商模板渲染"
+        # 4. 标签坐标缓存（PERF-03）：首次 ground 后缓存，后续直接复用
+        assert engine.state.get("tab_工作日") == [400, 150], engine.state
+        assert engine.state.get("tab_休息日") == [400, 150], engine.state
+        tab_grounds = [d for d in descs if "标签页" in d]
+        assert len(tab_grounds) == 2, f"标签应仅首次 ground（2 次），实际 {len(tab_grounds)}"
+        # 5. 截图命名与 result 聚合兼容
+        shots = sorted(p.name for p in (Path(tmp) / "out" / "screenshots").glob("*.jpg"))
+        assert any("_工作日_scroll_0_曹操出行.jpg" in n for n in shots), shots
+        assert any("_休息日_scroll_0_阳光出行.jpg" in n for n in shots), shots
+        # 6. VLM 统计
+        assert engine.stats["vlm_calls"] > 0, engine.stats["vlm_calls"]
+        engine.cleanup()
+    return "PASS ✓"
 
 
 # ======================================================================
-# Suite 3b: 平台注册表 / 新平台零侵入
+# Suite 3: 平台注册表 / 新平台零侵入
 # ======================================================================
 
 def test_platform_registry():
@@ -961,9 +337,11 @@ def test_platform_registry():
     assert gaode.flows_dir.name == "flows"
     assert gaode.profile_path.name == "gaode.json"
     assert gaode.default_flow == "v1"
-    assert "pricing_collect" in gaode.step_handlers, "gaode 应注册 pricing_collect"
+    # 计价控制流已 YAML 化：pricing_collect 不再作为平台步骤（由 subflow 表达）
+    assert "pricing_collect" not in gaode.step_handlers
+    assert "select_all" in gaode.step_handlers
     assert gaode.resolve_flow("v2").name == "v2_gaode.yaml", "flow 解析约定 <flow>_<platform>.yaml"
-    assert "v1" in gaode.list_flow_names(), "list_flow_names 应列出 v1/v2/v3"
+    assert "v2" in gaode.list_flow_names(), "list_flow_names 应列出 v1/v2/v3"
 
     try:
         get_platform("not_a_platform")
@@ -1025,22 +403,18 @@ def test_fake_platform_zero_intrusion():
 
 
 # ======================================================================
-# Suite 3c: debug/collect 输出模式
+# Suite 4: debug/collect 输出模式 + 耗时统计
 # ======================================================================
 
 def test_collect_mode_engine_no_output():
     """collect 模式：导航阶段截图写入临时目录，output 无截图、无标记图."""
     import tempfile
 
-    from collector.infrastructure.device.adb_utils import MockAdbTools
     from collector.workflows.flow_engine import FlowEngine
 
-    mock_adb = MockAdbTools()  # 真实写占位图，便于断言落盘位置
+    mock_adb = _MockAdbFixed()
     mock_grounder = MagicMock()
-    mock_grounder.ground.return_value = {
-        "element": "x", "bbox": None, "center": None, "conf": 0.0,
-        "found": False, "selected": None, "reason": "mock", "raw_response": "",
-    }
+    mock_grounder.ground.return_value = _miss()
 
     with tempfile.TemporaryDirectory() as tmp:
         out_dir = Path(tmp) / "out"
@@ -1067,81 +441,15 @@ def test_collect_mode_engine_no_output():
     return "PASS ✓"
 
 
-def test_collect_mode_pricing_saves_ride_page():
-    """collect 模式：打车页(刚进入/滑动)与详细计价页截图都保存到 output."""
-    import tempfile
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    mock_adb = MagicMock()  # get_screenshot 返回真值即可
-    with tempfile.TemporaryDirectory() as tmp:
-        out_dir = Path(tmp) / "out"
-        fsm = RidePricingFSM(
-            adb=mock_adb, grounder=MagicMock(), supplier="经济型",
-            profile_cfg={}, output_dir=str(out_dir), mode="collect",
-        )
-        p1 = fsm._save("p01_ride_page_entry")   # 刚进打车页
-        assert Path(p1).parent == out_dir / "screenshots", "裸截图应保存到 output/screenshots"
-        p2 = fsm._save("p02_s4_next")           # 打车页滑动
-        assert Path(p2).parent == out_dir / "screenshots", "裸截图应保存到 output/screenshots"
-        p3 = fsm._save("p03_detail_page")       # 详细计价页
-        assert Path(p3).parent == out_dir / "screenshots", "裸截图应保存到 output/screenshots"
-
-        # debug 默认：同样全部写入 output/screenshots
-        fsm2 = RidePricingFSM(
-            adb=mock_adb, grounder=MagicMock(), supplier="经济型",
-            profile_cfg={}, output_dir=str(out_dir / "dbg"),
-        )
-        p4 = fsm2._save("p01_x")
-        assert Path(p4).parent == (out_dir / "dbg" / "screenshots")
-    return "PASS ✓"
-
-
-def test_annotation_gated_by_mode():
-    """标记图仅 debug 模式输出."""
-    import tempfile
-
-    from PIL import Image
-
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
-
-    with tempfile.TemporaryDirectory() as tmp:
-        img_path = Path(tmp) / "src.png"
-        Image.new("RGB", (20, 20), "white").save(img_path)
-
-        # collect：不输出标记图
-        out1 = Path(tmp) / "out_collect"
-        fsm1 = RidePricingFSM(
-            adb=MagicMock(), grounder=MagicMock(), supplier="x",
-            profile_cfg={}, output_dir=str(out1), mode="collect",
-        )
-        fsm1._do_annotate(str(img_path), "tag1", lambda d: None)
-        assert not (out1 / "annotations" / "tag1.png").exists(), "collect 模式不应输出标记图"
-
-        # debug：输出标记图
-        out2 = Path(tmp) / "out_debug"
-        fsm2 = RidePricingFSM(
-            adb=MagicMock(), grounder=MagicMock(), supplier="x",
-            profile_cfg={}, output_dir=str(out2),
-        )
-        fsm2._do_annotate(str(img_path), "tag2", lambda d: None)
-        assert (out2 / "annotations" / "tag2.png").exists(), "debug 模式应输出标记图"
-    return "PASS ✓"
-
-
 def test_timing_stats_recorded():
     """耗时统计：等待/API/总耗时被记录并汇总."""
     import tempfile
 
-    from collector.infrastructure.device.adb_utils import MockAdbTools
     from collector.workflows.flow_engine import FlowEngine
 
-    mock_adb = MockAdbTools()
+    mock_adb = _MockAdbFixed()
     mock_grounder = MagicMock()
-    mock_grounder.ground.return_value = {
-        "element": "x", "bbox": None, "center": None, "conf": 0.0,
-        "found": False, "selected": None, "reason": "mock", "raw_response": "",
-    }
+    mock_grounder.ground.return_value = _miss()
 
     with tempfile.TemporaryDirectory() as tmp:
         flow = Path(tmp) / "f.yaml"
@@ -1160,11 +468,9 @@ def test_timing_stats_recorded():
         assert engine.stats.get("elapsed", 0) >= 0.01, "总耗时应被统计"
     return "PASS ✓"
 
-    return True
-
 
 # ======================================================================
-# Suite 4: 真实 VLM 素材验证 (不需要设备)
+# Suite 5: 真实 VLM 素材验证 (不需要设备)
 # ======================================================================
 
 def real_vlm_tests(api_key: str, base_url: str) -> None:
@@ -1184,7 +490,6 @@ def real_vlm_tests(api_key: str, base_url: str) -> None:
     )
 
     SCREEN_W, SCREEN_H = 1080, 2400
-    ref_question = str(_PROJECT_ROOT / "assets" / "button_to_price.png")
 
     test_cases = [
         {
@@ -1274,7 +579,7 @@ def real_vlm_tests(api_key: str, base_url: str) -> None:
 
 
 # ======================================================================
-# Suite 5: 真实设备 + 真实 VLM — 完整子流程 (需要设备)
+# Suite 6: 真实设备 + 真实 VLM — v2 全流程 (需要设备)
 # ======================================================================
 
 def real_device_test(
@@ -1284,16 +589,14 @@ def real_device_test(
     output_dir: str,
     device: str | None = None,
 ) -> None:
-    """在真实设备上执行一次完整的计价采集子流程.
-
-    前置条件: 设备已解锁, 高德地图处于打车页 (已输入起终点).
-    """
+    """在真实设备上执行一次完整的 v2 计价采集流程（YAML 子流程版）。"""
     from collector.infrastructure.device.adb_utils import AdbTools
-    from collector.platform.gaode.ride_pricing import RidePricingFSM
     from collector.infrastructure.vision.vlm_grounder import VLMGrounder
+    from collector.platform.gaode.platform import build_platform
+    from collector.workflows.flow_engine import FlowEngine
 
     print("\n" + "=" * 60)
-    print("  Real Device — 完整子流程")
+    print("  Real Device — v2 全流程（YAML 子流程版）")
     print("=" * 60)
 
     adb = AdbTools(adb_path, device=device)
@@ -1304,37 +607,43 @@ def real_device_test(
     )
 
     # 检查连接
-    test_shot = str(Path(output_dir) / "_test_connection.png")
     Path(output_dir).mkdir(parents=True, exist_ok=True)
+    test_shot = str(Path(output_dir) / "_test_connection.png")
     if not adb.get_screenshot(test_shot):
         print("❌ 无法连接设备")
         return
 
     print(f"  ✓ 设备已连接: {adb.screen_size}")
 
-    profile_cfg = _build_profile_cfg()
-    pricer = RidePricingFSM(
+    platform = build_platform()
+    v2_path = platform.resolve_flow("v2")
+
+    engine = FlowEngine(
         adb=adb,
         grounder=grounder,
-        supplier="经济型",
-        profile_cfg=profile_cfg,
+        flow_path=str(v2_path),
+        vars_={"Address": "北京西站", "Pickup": "我的位置"},
         output_dir=output_dir,
         verbose=True,
+        profile_cfg=platform.load_profile(),
+        platform_step_handlers=platform.step_handlers,
     )
 
     t0 = time.time()
     try:
-        results = pricer.run()
+        engine.run()
         elapsed = time.time() - t0
-        print(f"\n  ✓ 完成: {len(results)} 张截图, 耗时 {elapsed:.1f}s")
-        print(f"  VLM: {pricer.stats['vlm_calls']} 次调用, "
-              f"失败: {pricer.stats['vlm_failures']}")
+        print(f"\n  ✓ 完成, 耗时 {elapsed:.1f}s")
+        print(f"  VLM: {engine.stats['vlm_calls']} 次调用, "
+              f"失败: {engine.stats['vlm_failures']}")
     except KeyboardInterrupt:
         print("\n  ⚠ 用户中断")
     except Exception as e:
         print(f"\n  ❌ 失败: {e}")
         import traceback
         traceback.print_exc()
+    finally:
+        engine.cleanup()
 
 
 # ======================================================================
@@ -1343,13 +652,13 @@ def real_device_test(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="计价采集子流程测试",
+        description="计价采集测试（YAML 子流程版）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--real-vlm", action="store_true",
                         help="用真实 VLM API 验证素材 grounding")
     parser.add_argument("--real-device", action="store_true",
-                        help="在真实设备上执行完整子流程")
+                        help="在真实设备上执行 v2 全流程")
     parser.add_argument("--adb-path", help="ADB 路径 (--real-device 需要)")
     parser.add_argument("--device", help="设备序列号")
     parser.add_argument("--vlm-api-key", help="API Key")
@@ -1359,36 +668,31 @@ def main() -> None:
     args = parser.parse_args()
 
     print("=" * 60)
-    print("  计价采集子流程测试")
+    print("  计价采集测试（YAML 子流程版）")
     print("=" * 60)
 
     all_pass = True
 
     # ── Suite 1: 纯逻辑测试 ──
-    print("\n── Suite 1: 解析逻辑 ──")
+    print("\n── Suite 1: 解析/整理逻辑 ──")
     suite1 = [
         ("S2 JSON 数组解析",          test_s2_parse_json_array),
         ("S2 排除出租车/优享",         test_s2_parse_excludes_taxi_and_youxiang),
         ("S2 逐行回退解析",            test_s2_parse_line_by_line_fallback),
         ("S2 空数组",                 test_s2_parse_empty),
-        ("_extract_center bbox+center", test_extract_center_from_bbox_and_center),
-        ("_extract_center only center", test_extract_center_only_center),
-        ("_extract_center None",      test_extract_center_none),
-        ("CAP-01 预约用车检测解析",   test_detect_end_marker),
+        ("CAP-09 S2 dict 格式解析",   test_s2_parse_cap09_dict_format),
+        ("GroundingResult bbox+center", test_extract_center_from_bbox_and_center),
+        ("GroundingResult only center", test_extract_center_only_center),
+        ("GroundingResult 全零归一化", test_extract_center_none),
         ("RES-01 结果整理聚合",      test_screenshot_organizer),
-        ("CAP-05 页面无变化判定",     test_page_unchanged),
-        ("CAP-05 标记或稳定退出",     test_scroll_to_bottom_marker_or_stable),
-        ("CAP-06 采集循环终止条件",   test_collect_suppliers_loop),
-        ("CAP-07 打车页滑动截图+减半", test_swipe_down_screenshot_and_half_distance),
-        ("PERF-02 返回确定性化",      test_tap_back_arrow_deterministic),
-        ("PERF-03 标签坐标复用",      test_tab_coordinate_reuse),
-        ("CAP-08 找不到问号不崩溃",   test_s3a_no_question_no_crash),
-        ("CAP-09 S2响应解析",         test_parse_s2_response),
-        ("CAP-10 探针不落盘",         test_probe_not_saved_in_collect),
     ]
     for label, fn in suite1:
         try:
-            status, *extra = fn()
+            r = fn()
+            if isinstance(r, tuple):
+                status, *extra = r
+            else:
+                status, extra = r, []
             print(f"  [{status}] {label}")
             if extra:
                 print(f"         → {extra[0]}")
@@ -1396,28 +700,18 @@ def main() -> None:
             print(f"  [FAIL ✗] {label}: {e}")
             all_pass = False
 
-    # ── Suite 2: FSM 完整流程 Mock ──
-    print("\n── Suite 2: FSM 完整流程 Mock ──")
+    # ── Suite 2: v2 端到端 ──
+    print("\n── Suite 2: v2 端到端（导航 + 计价子流程 Mock） ──")
     try:
-        test_fsm_full_flow()
+        print(f"  [{test_v2_flow_end_to_end()}] v2 计价采集全流程")
     except Exception as e:
-        print(f"  [FAIL ✗] FSM Mock: {e}")
+        print(f"  [FAIL ✗] v2 端到端: {e}")
         import traceback
         traceback.print_exc()
         all_pass = False
 
-    # ── Suite 3: FlowEngine 编排 ──
-    print("\n── Suite 3: FlowEngine pricing_collect 编排 ──")
-    try:
-        test_flow_engine_pricing_collect_step()
-    except Exception as e:
-        print(f"  [FAIL ✗] FlowEngine: {e}")
-        import traceback
-        traceback.print_exc()
-        all_pass = False
-
-    # ── Suite 3b: 平台注册表 / 零侵入 ──
-    print("\n── Suite 3b: 平台注册表 / 新平台零侵入 ──")
+    # ── Suite 3: 平台注册表 / 零侵入 ──
+    print("\n── Suite 3: 平台注册表 / 新平台零侵入 ──")
     for label, fn in [
         ("平台注册表", test_platform_registry),
         ("假平台零侵入", test_fake_platform_zero_intrusion),
@@ -1431,12 +725,10 @@ def main() -> None:
             traceback.print_exc()
             all_pass = False
 
-    # ── Suite 3c: debug/collect 输出模式 ──
-    print("\n── Suite 3c: debug/collect 输出模式 ──")
+    # ── Suite 4: debug/collect 输出模式 ──
+    print("\n── Suite 4: debug/collect 输出模式 + 耗时 ──")
     for label, fn in [
         ("collect 引擎零输出", test_collect_mode_engine_no_output),
-        ("collect 打车页保存", test_collect_mode_pricing_saves_ride_page),
-        ("标记图 debug 门控", test_annotation_gated_by_mode),
         ("耗时统计", test_timing_stats_recorded),
     ]:
         try:
@@ -1448,14 +740,14 @@ def main() -> None:
             traceback.print_exc()
             all_pass = False
 
-    # ── Suite 4: 真实 VLM (可选) ──
+    # ── Suite 5: 真实 VLM (可选) ──
     if args.real_vlm:
         if not args.vlm_api_key or not args.vlm_base_url:
             print("\n❌ --real-vlm 需要 --vlm-api-key 和 --vlm-base-url")
             sys.exit(1)
         real_vlm_tests(args.vlm_api_key, args.vlm_base_url)
 
-    # ── Suite 5: 真实设备 (可选) ──
+    # ── Suite 6: 真实设备 (可选) ──
     if args.real_device:
         if not args.adb_path:
             print("\n❌ --real-device 需要 --adb-path")

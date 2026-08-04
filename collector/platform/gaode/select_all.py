@@ -14,8 +14,6 @@
 
 from __future__ import annotations
 
-import json
-import re
 import time
 from collections import deque
 
@@ -33,32 +31,6 @@ _COORD_MAX = 1000
 
 class SelectAllError(Exception):
     """全选操作失败（无法定位 / 状态 UNKNOWN / 点击后验证失败）。"""
-
-
-# ---------------------------------------------------------------------------
-# 严格 JSON 解析（不做自然语言兜底）
-# ---------------------------------------------------------------------------
-
-def _extract_json(text: str) -> dict | None:
-    """从 VLM 回复中提取 JSON 对象；失败返回 None。"""
-    if not text:
-        return None
-    candidates = [
-        r'<tool_call>\s*(.*?)\s*</tool_call>',
-        r'```(?:json)?\s*(\{.*?\})\s*```',
-        r'(\{.*\})',
-    ]
-    for pat in candidates:
-        m = re.search(pat, text, re.DOTALL)
-        if not m:
-            continue
-        try:
-            obj = json.loads(m.group(1).strip())
-            if isinstance(obj, dict):
-                return obj
-        except json.JSONDecodeError:
-            continue
-    return None
 
 
 def _rescale_bbox(bbox_1k: Any, screen_w: int, screen_h: int) -> list[int] | None:
@@ -125,13 +97,17 @@ def locate_select_all_target_vlm(
     if stats is not None:
         stats["vlm_calls"] = stats.get("vlm_calls", 0) + 1
 
+    from collector.infrastructure.vision.adapters import visual_query_result_from_dict
+
     resp = grounder.query_structured(
         image_path,
         system_prompt=_SYSTEM_PROMPT,
         user_prompt=_build_locate_prompt(label, sw, sh),
     )
-    raw = resp.get("raw_response", "") if isinstance(resp, dict) else ""
-    obj = _extract_json(raw)
+    # WS-2：统一结构化结果，JSON 提取集中在 domain/vision 适配器
+    vq = visual_query_result_from_dict(resp) if isinstance(resp, dict) else resp
+    obj = vq.structured
+    raw = vq.raw_response
 
     if not obj:
         if verbose:

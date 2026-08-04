@@ -68,7 +68,7 @@ LLM、VLM 和 Agent 不能自行宣布成功。无法证明状态正确时必须
 
 ## 3. 目标结构
 
-已按本结构一次性重构完成（REF-01，2026-08-03）：现有代码全部迁移到位，旧导入路径保留兼容层。以下目录当前已有代码：`cli/`、`workflows/`、`platform/gaode/`、`infrastructure/{device,vision}/`、`domain/`、`quality/`；其余目录（`application/`、`features/detail_capture/`、`infrastructure/persistence/`、`integrations/recognition/`、`recovery/`）为后续子任务预留，落地时再创建：
+已按本结构一次性重构完成（REF-01，2026-08-03）：现有代码全部迁移到位，旧导入路径保留兼容层。以下目录当前已有代码：`cli/`、`workflows/`、`platform/gaode/`、`infrastructure/{device,vision}/`、`domain/`、`quality/`；`application/` 已落地（共享 `ExecutionContext`，见 ARCH-08）；其余目录（`features/detail_capture/`、`infrastructure/persistence/`、`integrations/recognition/`、`recovery/`）为后续子任务预留，落地时再创建：
 
 ```text
 collector/
@@ -211,6 +211,12 @@ collector/
 | PERF-03 | 标签坐标复用 + 详情页等待再收敛（方案五） | `DONE` | 工作日/休息日标签坐标首次 LLM 记录后复用（不调 LLM/不截图）；tab_wait 0.5 / detail_scroll_wait 0.3 / scroll_top_wait 0.1 / back_wait 0.8；详见 耗时优化方案-2026-08.md |
 | PERF-02 | 返回导航确定性化 + 确定性等待收敛（方案一+二） | `DONE` | 详细页→弹窗→打车页直接 adb.back() 不调 VLM；pricing_page_wait 1.2s / after_confirm_wait 1.5s / tab_wait 0.8s / back_wait 1.0s；详见 耗时优化方案-2026-08.md |
 | PERF-01 | 耗时优化（P2） | `TODO` | 减少截图/标注/固定等待与VLM调用开销；collect 模式耗时归因准确 |
+| ARCH-08 | 共享 ExecutionContext：stats/等待/截图/标注 收敛到 application/context.py | `DONE` | FlowEngine 与计价 FSM 共用同一执行上下文（stats 自动归并、等待归因、截图重试/模式落盘、标注 debug 门控）；计价采集改为共享 engine.ctx，删除 handler 手动统计合并；现有调用方行为不变 | compileall + 全部 5 个测试文件通过；新增 tests/test_execution_context.py 13/13 |
+| ARCH-09 | FlowEngine 流程原语：extract_list / for_each / loop_until / subflow / verify / back + 计价 FSM 的 S 阶段 YAML 翻译（v4） | `DONE` | 新增运行时 state 与 {{.S.key}} 模板；6 个新步骤类型 + ground_click 支持 ref_image/wait_after；scroll_until_visible 增强（frame_suffix/stop_on_stable/scroll_back_to_top）；新增 v4_gaode.yaml + subflows/detail_capture_gaode.yaml，S2 抽为 extract_list handler；RidePricingFSM 保留（P3 删除） | compileall + 全部 6 个测试文件通过；新增 tests/test_flow_primitives.py 18/18 |
+
+| VIS-01 | 视觉能力统一接口层：domain/vision（结果模型+Protocol）+ VLM/ROI 适配器 | `DONE` | domain 定义 GroundingService/VisualQueryService/TextExtractor/RoiClassifier/ImageMatcher 协议与结构化结果模型；infrastructure 提供 VLMGrounder→适配器与勾选框 ROI 分类适配器；现有调用方与测试全绿；离线测试通过 |
+| VIS-02 | 调用点迁移到 domain/vision 结构化结果（WS-2 P2） | `DONE` | FlowEngine._vlm_ground_and_click/_vlm_ground_ref/ground_doublecheck/_verify_page/_do_scroll_until_visible/_do_extract_list、RidePricingFSM._s2_list_suppliers/_s3a/_s3c/_tap_tab/_detect_end_marker、select_all.locate、supplier_list S2 handler 全部改为消费 GroundingResult/VisualQueryResult（经 ctx.vision 适配器）；YES/NO 判定集中为 VisualQueryResult.is_affirmative；JSON 提取集中为适配器 _extract_structured（删除 select_all._extract_json 与 FSM._parse_s2_response 重复解析，单一实现 supplier_parse）；行为不变（仅 center=[0,0] 哨兵不再产生 (0,0) 点击的安全改进） | compileall + 全部 6 个测试文件通过；test_vision_interfaces 24/24（新增 is_affirmative/structured 提取用例） |
+| ARCH-10 | v2/v3 整理（WS-1 P3）：v2 计价切到 YAML 子流程、删除硬编码 RidePricingFSM 与 v4 | `DONE` | 新增 subflows/pricing_collect_gaode.yaml；v2 改为 subflow 计价（主场景）；detail_capture 加 cache_key 标签复用与 target_prompt 专版提示词（还原 PERF-03/CAP-01 行为）；删除 ride_pricing.py（FSM）/collector/ride_pricing.py/v4_gaode.yaml；platform.py 移除 pricing_collect handler；test_pricing_collect 重写为无 FSM 版（v2 端到端）；新增 接入新平台指南.md | compileall + 全部 6 个测试文件通过 |
 
 计划维护规则：
 
@@ -277,6 +283,14 @@ python -m compileall collector tests
 | 2026-08-04 | PERF-03 | `DONE` | 标签坐标复用（_tab_coords 缓存，首次 LLM 记录后续直接点击）+ 详情页等待再收敛（tab_wait 0.5/detail_scroll_wait 0.3/scroll_top_wait 0.1/back_wait 0.8） | test_pricing_collect（PERF-03 标签复用测试 + 全流程断言标签 ground=2）通过 |
 | 2026-08-04 | PERF-02 | `DONE` | 返回导航确定性化（adb.back() 替代 VLM ground）+ 确定性等待收敛（back_wait 1.0/tab_wait 0.8/pricing_page_wait 1.2/after_confirm_wait 1.5）；新建 耗时优化方案-2026-08.md | test_pricing_collect（含 PERF-02 返回确定性化测试 + 全流程回归）通过 |
 | 2026-08-04 | PERF-01 | `TODO` | 耗时优化 P2：debug 模式非准确耗时；API/等待/设备+编码三块归因，待优化 | 250.4s 真机日志归因 |
+
+
+| 2026-08-04 | VIS-01 | `DONE` | 视觉能力统一接口层（WS-2 P1）：新增 domain/vision（GroundingResult/VisualQueryResult/TextExtractionResult/RoiStateResult/MatchResult 结果模型 + GroundingService/VisualQueryService/TextExtractor/RoiClassifier/ImageMatcher Protocol）；infrastructure/vision/adapters.py 提供 VLMServiceAdapter（裸 dict→结构化，center list→tuple、全零几何归一化、耗时透传）与 CheckboxRoiClassifier；现有调用方零改动 | compileall + test_double_check + test_select_all + test_pricing_collect 全绿；新增 tests/test_vision_interfaces.py 20/20 通过 |
+| 2026-08-04 | VIS-02 | `DONE` | 调用点迁移（WS-2 P2）：FlowEngine/计价FSM/select_all/supplier_list 的 ground/query_text/query_structured/classify_page 全部改经 ctx.vision（VLMServiceAdapter）消费结构化结果；VisualQueryResult.is_affirmative 集中 YES/NO；适配器 _extract_structured 集中 JSON 提取，删除 select_all._extract_json 与 FSM._parse_s2_response 重复解析（单一实现 supplier_parse.py，ride_pricing 兼容再导出 _SKIP_*）；grounding_result_from_dict 将 center 归一化为 tuple、全零几何→None | compileall + test_double_check + test_select_all + test_pricing_collect + test_execution_context + test_flow_primitives 全绿；test_vision_interfaces 24/24 |
+| 2026-08-04 | ARCH-10 | `DONE` | v2/v3 整理（WS-1 P3）：新建 subflows/pricing_collect_gaode.yaml（原语版计价，替代 FSM）；v2_gaode.yaml 改为导航 + subflow 计价（主场景）；detail_capture 加 cache_key（PERF-03 标签复用，命中不截图不调 VLM）与 target_prompt（蓝色「预约用车」专版，CAP-01）；ground_click 支持 cache_key、scroll_until_visible 支持 target_prompt；删除 ride_pricing.py / collector/ride_pricing.py / v4_gaode.yaml；platform.py 移除 pricing_collect handler（step_handlers 剩 select_all/pricing_result_organize/s2_list_suppliers/pricing_loop_done）；test_pricing_collect.py 重写为无 FSM 版（S2 解析走 supplier_parse、v2 端到端、注册表/零侵入/模式/耗时/真机入口）；新增 接入新平台指南.md；README/codex.md 同步 | compileall + test_double_check + test_select_all + test_pricing_collect + test_vision_interfaces + test_execution_context + test_flow_primitives 全绿 |
+| 2026-08-04 | ARCH-09 | `DONE` | 流程原语（WS-1 P2）：FlowEngine 增加 runtime state + {{.S.key}} 模板、extract_list/for_each/loop_until/subflow/verify/back 步骤、_run_steps 抽取；ground_click 支持 ref_image/wait_after；scroll_until_visible 增强（frame_suffix/stop_on_stable/scroll_back_to_top）；新增 v4_gaode.yaml（原语版计价采集）+ subflows/detail_capture_gaode.yaml + gaode/supplier_list.py（S2 extract_list/loop_done handler）；handle_select_all 写 select_all_done；build_flow_vars 覆盖 v4；RidePricingFSM 未删（P3） | compileall + test_double_check + test_select_all + test_pricing_collect + test_vision_interfaces + test_execution_context 全绿；新增 tests/test_flow_primitives.py 18/18（含 v4 端到端） |
+| 2026-08-04 | ARCH-08 | `DONE` | 共享 ExecutionContext（WS-1 P1）：新增 application/context.py（stats/等待/截图/标注/日志/screen_size）；FlowEngine 与 RidePricingFSM 改为持 ctx 并委托（保留全部方法签名与 legacy 构造参数）；handle_pricing_collect 改为共享 engine.ctx，删除手动 stats 合并与 add_wait；test_flow_engine_pricing_collect_step 更新为「共享 ctx 归并」契约 | compileall + test_double_check + test_select_all + test_pricing_collect + test_vision_interfaces 全绿；新增 tests/test_execution_context.py 13/13 通过 |
+
 
 ## 9. AI交付格式
 
