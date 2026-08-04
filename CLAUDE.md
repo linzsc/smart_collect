@@ -172,6 +172,12 @@ collector/
 | `BLOCKED` | 被设备、接口、数据或决策阻塞 |
 | `DONE` | 满足验收条件并完成验证 |
 
+### 4.4 提交与推送
+
+- **禁止主动 commit / push**：用户没有显式说明「push / 推送」时，不执行 `git commit` 和 `git push`。
+- 只有用户显式说「push / 推送」后，才允许提交并推送代码。
+- 完成子任务后默认把改动保留在工作区，等待用户指示。
+
 ## 5. 开发计划
 
 当前任务：`NONE`
@@ -195,6 +201,7 @@ collector/
 | ARCH-06 | 截图与标记输出模式（debug/collect） | `DONE` | 标记图仅 debug 输出；collect 模式仅保存详细计价页截图；离线测试通过 |
 | ARCH-07 | collect 模式采集打车页 + 耗时统计 | `DONE` | collect 保存打车页(含滑动)与详细计价页；输出每步/API/等待耗时；离线测试通过 |
 | SEL-01 | 目标锚定的幂等全选 ensure_all_selected | `DONE` | 定位/判定拆分，仅判主勾选框ROI；素材100次成功率100%(700/700)；点击后重验；真机验证通过 |
+| RES-01 | 采集结果整理（必要截图筛选+聚合） | `DONE` | output 筛选打车页(select_all_after)+每(标签×运力商)前4张滚动截图，聚合到 result/工作日|休息日/{冒泡页,<运力商>}/，打车页入冒泡页（每大文件夹1次共2次）；离线测试+真实 output 验证通过 |
 | PERF-01 | 耗时优化（P2） | `TODO` | 减少截图/标注/固定等待与VLM调用开销；collect 模式耗时归因准确 |
 
 计划维护规则：
@@ -251,6 +258,8 @@ python -m compileall collector tests
 | 2026-08-04 | SEL-01 | `DONE` | ensure_all_selected 目标锚定幂等全选：domain/checkbox + infra/vision/checkbox + gaode/select_all(含离线定位启发式) + select_all 平台步骤(v3) + 删 NL 兜底；素材100次成功率700/700 | compileall + test_double_check + test_pricing_collect + test_select_all 通过 |
 | 2026-08-04 | RUN-01 | `DONE` | 真机 v2 debug 全流程跑通（起终点→计价采集2家）；S1 全选经济目标锚定：未勾选→点击→已勾选；耗时 250.4s（API 58.3s/等待52.2s） | 真机日志（run_real_test.txt） |
 | 2026-08-04 | CAP-01 | `DONE` | 详细计价页每次滑动后调用LLM判断蓝色“预约用车”：检测到即停止滚动并回顶后继续（工作日回顶→休息日，休息日采完退出）；_detect_end_marker 独立方法并计入 vlm_calls；_scroll_to_bottom 返回检测结果 | compileall + test_double_check + test_pricing_collect（Suite1 检测解析 / Suite2 每次滑动检测·终止滚动·回顶）通过；真实素材 VLM 验证：工作日第4张/休息日第3张检测到「预约用车」，流程可完成 |
+| 2026-08-04 | DOC-03 | `DONE` | codex.md/CLAUDE.md 增加 §4.4：禁止主动 commit/push，仅用户显式「push」时提交推送 | 文档检查 |
+| 2026-08-04 | RES-01 | `DONE` | 新增 screenshot_organizer：必要截图=打车页(select_all_after)+每(标签×运力商)scroll_0..3；聚合 result/工作日|休息日/{冒泡页,<运力商>}/，打车页入冒泡页（每大文件夹1次共2次）；handle_pricing_collect 结束后调用；output 缺失/为空安全跳过；result/ 加入 .gitignore | test_pricing_collect（含 RES-01 聚合测试）通过；真实 output/ 验证 18 张/冒泡页×2+4组结构正确 |
 | 2026-08-04 | PERF-01 | `TODO` | 耗时优化 P2：debug 模式非准确耗时；API/等待/设备+编码三块归因，待优化 | 250.4s 真机日志归因 |
 
 ## 9. AI交付格式

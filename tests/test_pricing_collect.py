@@ -177,6 +177,74 @@ def test_detect_end_marker():
     return "PASS ✓"
 
 
+
+
+def test_screenshot_organizer():
+    """RES-01: 结果整理 — 筛选必要截图并按 工作日/休息日 × 运力商 聚合到 result/."""
+    import tempfile
+
+    from collector.platform.gaode.screenshot_organizer import collect_necessary_screenshots
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "output"
+        res = Path(tmp) / "result"
+        out.mkdir()
+
+        # 打车页（全选经济后）
+        (out / "p04_select_all_after.jpg").write_bytes(b"ride")
+        # 各标签 × 各运力商 scroll_0..3
+        cases = [
+            ("p12", "工作日", "飞嘀打车"),
+            ("p22", "休息日", "飞嘀打车"),
+            ("p34", "工作日", "旗妙出行"),
+            ("p44", "休息日", "旗妙出行"),
+        ]
+        for prefix, tab, supplier in cases:
+            base = int(prefix[1:])
+            for i in range(4):
+                (out / f"p{base + i}_{tab}_scroll_{i}_{supplier}.jpg").write_bytes(b"s")
+        # 干扰文件：不应被复制
+        for name in (
+            "p16_工作日_check_3_飞嘀打车.jpg",
+            "p20_工作日_check_6_飞嘀打车.jpg",
+            "p26_02_休息日_bottom_飞嘀打车.jpg",
+            "p11_detail_before_工作日_飞嘀打车.jpg",
+            "p05_after_select_all.jpg",
+        ):
+            (out / name).write_bytes(b"x")
+
+        summary = collect_necessary_screenshots(out, res)
+
+        groups = summary["groups"]
+        assert set(groups) == {"工作日", "休息日"}, groups
+        for tab in ("工作日", "休息日"):
+            assert set(groups[tab]) == {"飞嘀打车", "旗妙出行"}, groups[tab]
+            for supplier in ("飞嘀打车", "旗妙出行"):
+                files = sorted(groups[tab][supplier])
+                assert len(files) == 4, f"{tab}/{supplier}: {files}"
+                assert files[0].endswith(f"_scroll_0_{supplier}.jpg"), files
+                assert files[3].endswith(f"_scroll_3_{supplier}.jpg"), files
+
+        # 目录结构：打车页入 <标签>/冒泡页/（每个大文件夹各 1 次，共 2 次）
+        for tab in ("工作日", "休息日"):
+            bubble = res / tab / "冒泡页"
+            assert (bubble / "p04_select_all_after.jpg").exists(), f"{bubble} 缺打车页"
+            for supplier in ("飞嘀打车", "旗妙出行"):
+                folder = res / tab / supplier
+                assert not (folder / "p04_select_all_after.jpg").exists(), \
+                    f"{folder} 不应包含打车页"
+                scrolls = list(folder.glob(f"*_{tab}_scroll_*_{supplier}.jpg"))
+                assert len(scrolls) == 4, f"{folder}: 应 4 张滚动截图, 实际 {len(scrolls)}"
+
+        # 干扰文件未复制
+        assert not (res / "工作日" / "飞嘀打车" / "p16_工作日_check_3_飞嘀打车.jpg").exists()
+        assert not (res / "工作日" / "飞嘀打车" / "p05_after_select_all.jpg").exists()
+
+        # 打车页 1 张 × 2 大文件夹 + 滚动 4 张 × 4 组 = 18
+        assert summary["copied"] == 18, f"copied={summary['copied']}"
+    return "PASS ✓"
+
+
 # ======================================================================
 # Suite 2: FSM 完整流程 Mock 测试
 # ======================================================================
@@ -945,6 +1013,7 @@ def main() -> None:
         ("_extract_center only center", test_extract_center_only_center),
         ("_extract_center None",      test_extract_center_none),
         ("CAP-01 预约用车检测解析",   test_detect_end_marker),
+        ("RES-01 结果整理聚合",      test_screenshot_organizer),
     ]
     for label, fn in suite1:
         try:

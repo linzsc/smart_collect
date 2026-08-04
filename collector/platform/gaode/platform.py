@@ -62,6 +62,37 @@ def handle_pricing_collect(engine, step: dict) -> None:
     engine.stats["api_seconds"] = engine.stats.get("api_seconds", 0.0) + pricer.stats.get("api_seconds", 0.0)
     engine.add_wait(pricer.stats.get("wait_seconds", 0.0))  # 并入全局等待累加器
 
+    # ── 结果整理：筛选必要截图并聚合到 result/（RES-01）──
+    _organize_result_screenshots(engine)
+
+
+def _organize_result_screenshots(engine) -> None:
+    """计价采集结束后，把必要截图聚合到 result/（工作日/休息日 × 运力商）。
+
+    必要截图：打车页（全选经济后）+ 每个运力商每个标签前 N 张滚动截图。
+    仅复制，不移动/删除 output/ 原图；失败只告警，不影响主流程。
+    """
+    try:
+        from collector.platform.gaode.screenshot_organizer import collect_necessary_screenshots
+
+        scroll_count = int(
+            engine.profile_cfg.get("collection", {}).get("result_scroll_count", 4)
+        )
+        result_dir = str(Path(engine.output_dir).resolve().parent / "result")
+        summary = collect_necessary_screenshots(
+            output_dir=engine.output_dir,
+            result_dir=result_dir,
+            scroll_count=scroll_count,
+            logger=engine._log,
+        )
+        groups = summary.get("groups", {})
+        engine._log(f"── 结果整理: {summary.get('copied', 0)} 张 → {result_dir}")
+        for tab in ("工作日", "休息日"):
+            for supp, files in groups.get(tab, {}).items():
+                engine._log(f"    {tab}/{supp}: 滚动截图 {len(files)} 张 + 打车页")
+    except Exception as e:
+        engine._log(f"  ⚠ 结果整理失败: {e}")
+
 
 # ---------------------------------------------------------------------------
 # 平台特有步骤：select_all（目标锚定的幂等全选，SEL-01）
