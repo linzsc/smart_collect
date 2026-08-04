@@ -39,6 +39,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from collector.infrastructure.device.adb_utils import AdbTools
+from collector.infrastructure.vision.ocr_adapter import OcrTextExtractor
 from collector.infrastructure.vision.vlm_grounder import VLMGrounder
 from collector.platform.registry import available_platforms, get_platform
 from collector.workflows.flow_engine import FlowEngine
@@ -92,6 +93,8 @@ def main() -> None:
                         help="截图最大像素数 (默认: 400000)")
     parser.add_argument("--mode", default="debug", choices=["debug", "collect"],
                         help="debug: 每步截图+标记图；collect: 仅保存详细计价页截图 (默认: debug)")
+    parser.add_argument("--no-ocr", action="store_true",
+                        help="关闭本地 OCR（默认开启，用于「预约用车」检测；OCR_PROFILE=DEV 切环境）")
 
     # ── 预扫描 --platform，注册平台自己的参数（如 gaode 的 --address/--pickup），
     #    保证 `--help` 也能完整展示平台参数 ──
@@ -152,6 +155,7 @@ def main() -> None:
         profile_cfg=profile_cfg,
         platform_step_handlers=platform.step_handlers,
         mode=args.mode,
+        text_extractor=None if args.no_ocr else OcrTextExtractor(),
     )
 
     t_start = time.time()

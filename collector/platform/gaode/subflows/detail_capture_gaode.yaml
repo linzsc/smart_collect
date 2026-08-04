@@ -56,6 +56,7 @@ steps:
         description: "「{{.S.tab}}」下滑至出现「预约用车」或页面无变化"
         target_text: "预约用车"
         target_prompt: "这是高德打车「详细计价规则」页面截图。请判断页面上是否出现了蓝色文字「预约用车」。只输出 YES 或 NO。"
+        ocr_first: true
         max_swipes: 12
         frame_suffix: "{{.S.supplier}}"
         stop_on_stable: true

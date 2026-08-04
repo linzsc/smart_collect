@@ -47,6 +47,7 @@ class ExecutionContext:
         verbose: bool = True,
         log_prefix: str = "Exec",
         stats: dict[str, Any] | None = None,
+        text_extractor: Any | None = None,   # OCR TextExtractor（可空，None=OCR 关闭）
     ):
         self.adb = adb
         self.grounder = grounder
@@ -59,7 +60,9 @@ class ExecutionContext:
         self.stats = stats or {
             "vlm_calls": 0, "vlm_failures": 0, "steps_executed": 0,
             "api_seconds": 0.0, "wait_seconds": 0.0, "elapsed": 0.0,
+            "ocr_calls": 0, "ocr_failures": 0,
         }
+        self._text_extractor = text_extractor
         self._wait_total = 0.0
         self._scratch_dir: Path | None = None
         # 统一视觉能力服务（domain/vision 结构化结果），FlowEngine / 计价 FSM / handler 共用
@@ -126,6 +129,17 @@ class ExecutionContext:
     def vision(self):
         """统一视觉能力服务：定位/问答/分类返回结构化结果（GroundingResult 等）。"""
         return self._vision
+
+    @property
+    def ocr(self):
+        """本地 OCR 文本提取（TextExtractor）；未注入为 None（OCR 关闭）。"""
+        return self._text_extractor
+
+    def incr_ocr_calls(self, n: int = 1) -> None:
+        self.stats["ocr_calls"] = self.stats.get("ocr_calls", 0) + n
+
+    def incr_ocr_failures(self, n: int = 1) -> None:
+        self.stats["ocr_failures"] = self.stats.get("ocr_failures", 0) + n
 
     def add_wait(self, seconds: float) -> None:
         """合并子流程产生的等待时长，用于总耗时归因。"""

@@ -59,6 +59,7 @@ class FlowEngine:
         profile_cfg: dict[str, Any] | None = None,
         platform_step_handlers: dict[str, Any] | None = None,
         mode: str = "debug",
+        text_extractor: Any | None = None,
     ):
         self.adb = adb
         self.grounder = grounder
@@ -73,7 +74,7 @@ class FlowEngine:
         self.ctx = ExecutionContext(
             adb=adb, grounder=grounder,
             output_dir=output_dir, mode=mode, verbose=verbose,
-            log_prefix="Flow",
+            log_prefix="Flow", text_extractor=text_extractor,
         )
         self.output_dir = self.ctx.output_dir
         self.mode = self.ctx.mode
@@ -382,14 +383,29 @@ class FlowEngine:
         for i in range(max_swipes):
             stem = f"{step_id}_scroll_{i}" + (f"_{suffix}" if suffix else "")
             shot = self._screenshot(stem)
-            if step.get("target_prompt"):
-                desc = self._render(step.get("target_prompt"))
-            else:
-                desc = f"当前截图中是否出现「{target}」文字？只回答 YES 或 NO。"
-            self.stats["vlm_calls"] += 1
-            resp = self.ctx.vision.query_text(shot, desc)
-            found = resp.is_affirmative
-            self._log(f"  [{i}] 找「{target}」: {'FOUND' if found else '↓'}")
+
+            # OCR 优先：本地 OCR 检测目标文字（如「预约用车」），未命中/异常再走 VLM 兜底
+            found = False
+            if step.get("ocr_first") and self.ctx.ocr is not None and shot:
+                self.ctx.incr_ocr_calls()
+                try:
+                    ocr_res = self.ctx.ocr.extract(shot)
+                    if not ocr_res.success:
+                        self.ctx.incr_ocr_failures()
+                    found = ocr_res.success and ocr_res.contains(target)
+                    self._log(f"  [{i}] OCR「{target}」: {'FOUND' if found else '未命中'}")
+                except Exception as e:  # noqa: BLE001 - 异常转 VLM 兜底
+                    self.ctx.incr_ocr_failures()
+                    self.ctx.log(f"  ⚠ OCR 检测异常，转 VLM 兜底: {e}")
+            if not found:
+                if step.get("target_prompt"):
+                    desc = self._render(step.get("target_prompt"))
+                else:
+                    desc = f"当前截图中是否出现「{target}」文字？只回答 YES 或 NO。"
+                self.stats["vlm_calls"] += 1
+                resp = self.ctx.vision.query_text(shot, desc)
+                found = resp.is_affirmative
+                self._log(f"  [{i}] VLM「{target}」: {'FOUND' if found else '↓'}")
 
             if found:
                 found_stem = f"{step_id}_found" + (f"_{suffix}" if suffix else "")
