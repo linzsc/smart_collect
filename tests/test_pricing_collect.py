@@ -199,14 +199,14 @@ def test_screenshot_organizer():
         (shots / "p04_select_all_after.jpg").write_bytes(b"ride")
         # 各标签 × 各运力商 scroll_0..3
         cases = [
-            ("p12", "工作日", "飞嘀打车"),
-            ("p22", "休息日", "飞嘀打车"),
-            ("p34", "工作日", "旗妙出行"),
-            ("p44", "休息日", "旗妙出行"),
+            ("p12", "工作日", "飞嘀打车", 6),   # 数量不固定：6 帧
+            ("p22", "休息日", "飞嘀打车", 4),
+            ("p34", "工作日", "旗妙出行", 4),
+            ("p44", "休息日", "旗妙出行", 4),
         ]
-        for prefix, tab, supplier in cases:
+        for prefix, tab, supplier, count in cases:
             base = int(prefix[1:])
-            for i in range(4):
+            for i in range(count):
                 (shots / f"p{base + i}_{tab}_scroll_{i}_{supplier}.jpg").write_bytes(b"s")
         # 干扰文件：不应被复制
         for name in (
@@ -221,14 +221,18 @@ def test_screenshot_organizer():
         summary = collect_necessary_screenshots(out, res)
 
         groups = summary["groups"]
+        expected = {
+            ("工作日", "飞嘀打车"): 6, ("工作日", "旗妙出行"): 4,
+            ("休息日", "飞嘀打车"): 4, ("休息日", "旗妙出行"): 4,
+        }
         assert set(groups) == {"工作日", "休息日"}, groups
         for tab in ("工作日", "休息日"):
             assert set(groups[tab]) == {"飞嘀打车", "旗妙出行"}, groups[tab]
             for supplier in ("飞嘀打车", "旗妙出行"):
                 files = sorted(groups[tab][supplier])
-                assert len(files) == 4, f"{tab}/{supplier}: {files}"
+                want = expected[(tab, supplier)]
+                assert len(files) == want, f"{tab}/{supplier}: 应 {want} 张, 实际 {len(files)}"
                 assert files[0].endswith(f"_scroll_0_{supplier}.jpg"), files
-                assert files[3].endswith(f"_scroll_3_{supplier}.jpg"), files
 
         # 目录结构：打车页入 <标签>/冒泡页/（每个大文件夹各 1 次，共 2 次）
         for tab in ("工作日", "休息日"):
@@ -239,14 +243,14 @@ def test_screenshot_organizer():
                 assert not (folder / "p04_select_all_after.jpg").exists(), \
                     f"{folder} 不应包含打车页"
                 scrolls = list(folder.glob(f"*_{tab}_scroll_*_{supplier}.jpg"))
-                assert len(scrolls) == 4, f"{folder}: 应 4 张滚动截图, 实际 {len(scrolls)}"
+                assert len(scrolls) == expected[(tab, supplier)], f"{folder}: 滚动帧数量不符"
 
         # 干扰文件未复制
         assert not (res / "工作日" / "飞嘀打车" / "p16_工作日_check_3_飞嘀打车.jpg").exists()
         assert not (res / "工作日" / "飞嘀打车" / "p05_after_select_all.jpg").exists()
 
-        # 打车页 1 张 × 2 大文件夹 + 滚动 4 张 × 4 组 = 18
-        assert summary["copied"] == 18, f"copied={summary['copied']}"
+        # 打车页 1 张 × 2 大文件夹 + 滚动 (6+4+4+4) 张 = 20
+        assert summary["copied"] == 20, f"copied={summary['copied']}"
     return "PASS ✓"
 
 
@@ -322,6 +326,11 @@ def test_scroll_to_bottom_marker_or_stable():
     assert fsm3._scroll_to_bottom("工作日", "飞嘀打车") is False
     assert fsm3._detect_end_marker.call_count == 2, fsm3._detect_end_marker.call_count
     assert fsm3._page_unchanged.call_count == 2, fsm3._page_unchanged.call_count
+
+    # 4) CAP-10：滚动帧命名 scroll_0..N，无 check 重复帧
+    shot_names = [c.args[0] for c in fsm1._shot.call_args_list]
+    assert not any("check" in n for n in shot_names), shot_names
+    assert "工作日_scroll_0_飞嘀打车" in shot_names, shot_names
     return "PASS ✓"
 
 
@@ -486,10 +495,11 @@ def test_tab_coordinate_reuse():
     fsm._tap_tab_and_scroll("工作日", "曹操出行")
     fsm._tap_tab_and_scroll("工作日", "火箭出行")
 
-    # 首次 ground 一次并缓存，第二次复用坐标直接点击
+    # 首次 ground 一次并缓存，第二次复用坐标直接点击（不再截图 detail_before）
     assert mock_grounder.ground.call_count == 1, mock_grounder.ground.call_count
     assert mock_adb.click.call_count == 2, mock_adb.click.call_count
-    assert fsm._shot.call_count == 1, fsm._shot.call_count  # 仅首次截图
+    before_shots = [c.args[0] for c in fsm._shot.call_args_list if "detail_before" in str(c.args[0])]
+    assert len(before_shots) == 1, before_shots  # 仅首次截 detail_before
     assert fsm._tab_coords.get("工作日") == (500, 300), fsm._tab_coords
     return "PASS ✓"
 
@@ -538,6 +548,44 @@ def test_parse_s2_response():
     # 空响应/非法 → ([], False)
     suppliers3, ended3 = RidePricingFSM._parse_s2_response("")
     assert suppliers3 == [] and ended3 is False
+    return "PASS ✓"
+
+
+
+def test_probe_not_saved_in_collect():
+    """CAP-10: collect 模式探针帧不落盘（进临时目录）；debug 模式照常保存。"""
+    import tempfile
+
+    from collector.infrastructure.device.adb_utils import MockAdbTools
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    # collect：探针帧不落盘
+    mock_adb = MockAdbTools()
+    out1 = Path(tempfile.gettempdir()) / "cap10_probe_collect"
+    fsm1 = RidePricingFSM(adb=mock_adb, grounder=MagicMock(), supplier="x",
+                          profile_cfg={}, output_dir=str(out1), mode="collect")
+    try:
+        probe = fsm1._probe("q_x")
+        assert not (out1 / "screenshots" / "q_x.jpg").exists(), "collect 探针帧不应落盘"
+        assert Path(probe).parent != out1 / "screenshots", "探针应在临时目录"
+
+        # select_all_after 必须落盘（result 冒泡页用）
+        save = fsm1._s1_screenshot("select_all_after")
+        assert Path(save).parent == out1 / "screenshots", "select_all_after 应落盘"
+        fsm1._s1_screenshot("select_all_before")  # 探针
+        assert not (out1 / "screenshots" / "select_all_before.jpg").exists()
+    finally:
+        fsm1.cleanup()
+
+    # debug：探针帧等价保存
+    out2 = Path(tempfile.gettempdir()) / "cap10_probe_debug"
+    fsm2 = RidePricingFSM(adb=MockAdbTools(), grounder=MagicMock(), supplier="x",
+                          profile_cfg={}, output_dir=str(out2), mode="debug")
+    try:
+        p2 = fsm2._probe("q_x")
+        assert Path(p2).parent == out2 / "screenshots", "debug 探针帧应保存"
+    finally:
+        fsm2.cleanup()
     return "PASS ✓"
 
 # ======================================================================
@@ -1336,6 +1384,7 @@ def main() -> None:
         ("PERF-03 标签坐标复用",      test_tab_coordinate_reuse),
         ("CAP-08 找不到问号不崩溃",   test_s3a_no_question_no_crash),
         ("CAP-09 S2响应解析",         test_parse_s2_response),
+        ("CAP-10 探针不落盘",         test_probe_not_saved_in_collect),
     ]
     for label, fn in suite1:
         try:

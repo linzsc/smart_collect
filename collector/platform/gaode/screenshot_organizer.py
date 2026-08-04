@@ -5,7 +5,7 @@
 计价采集结束后调用。从 output/ 筛选必要截图：
 
 - 打车页（全选经济后）：文件名含 `select_all_after`，如 p04_select_all_after.jpg
-- 每个运力商每个标签页的前 N 张滚动截图：`*_<标签>_scroll_<i>_<运力商>.jpg`（默认 N=4，i=0..3）
+- 每个运力商每个标签页的全部滚动截图：`*_<标签>_scroll_<i>_<运力商>.jpg`（数量随下滑次数，CAP-10）
 
 聚合结构（result/）：
 
@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Callable
 
 DEFAULT_TABS: tuple[str, ...] = ("工作日", "休息日")
-DEFAULT_SCROLL_COUNT = 4               # 每个 (标签, 运力商) 保留 scroll_0..N-1
+DEFAULT_SCROLL_COUNT: int | None = None  # None = 取全部滚动帧（数量随下滑次数，CAP-10）
 RIDE_PAGE_KEYWORD = "select_all_after"  # 打车页（全选经济后）文件名关键字
 RIDE_PAGE_FOLDER = "冒泡页"             # 打车页所在子文件夹（每个大文件夹各 1 次）
 
@@ -44,7 +44,7 @@ def collect_necessary_screenshots(
     output_dir: str | Path,
     result_dir: str | Path = "./result",
     tabs: tuple[str, ...] = DEFAULT_TABS,
-    scroll_count: int = DEFAULT_SCROLL_COUNT,
+    scroll_count: int | None = DEFAULT_SCROLL_COUNT,
     ride_page_keyword: str = RIDE_PAGE_KEYWORD,
     logger: Logger = None,
 ) -> dict:
@@ -110,7 +110,7 @@ def collect_necessary_screenshots(
             copied += 1
         for (_, supplier), by_idx in sorted(tab_groups.items()):
             indices = sorted(by_idx)
-            chosen = [by_idx[i] for i in indices if i < scroll_count]
+            chosen = [by_idx[i] for i in indices if scroll_count is None or i < scroll_count]
             if not chosen:
                 continue
             folder = res / tab / supplier

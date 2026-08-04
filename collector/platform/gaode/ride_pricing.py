@@ -64,6 +64,7 @@ class RidePricingFSM:
                       "api_seconds": 0.0, "wait_seconds": 0.0, "elapsed": 0.0}
         self._wait_total = 0.0  # 累计流程等待时长
         self._tab_coords: dict[str, tuple[int, int]] = {}  # 标签坐标缓存（PERF-03）
+        self._probe_dir_path: Path | None = None        # collect 模式探针临时目录（CAP-10）
 
     @property
     def debug_mode(self) -> bool:
@@ -112,6 +113,33 @@ class RidePricingFSM:
         self._ensure_screenshot(path)
         return path
 
+    def _probe(self, name: str) -> str:
+        """探针帧：仅供 VLM 定位/检测，collect 模式不落盘；debug 模式保存（等价 _shot）。"""
+        if self.debug_mode:
+            return self._shot(name)
+        probe_dir = self._probe_dir()
+        path = str(probe_dir / f"{name}.jpg")
+        self._ensure_screenshot(path)
+        return path
+
+    def _probe_dir(self) -> Path:
+        """collect 模式探针临时目录（懒创建）。"""
+        if self._probe_dir_path is None:
+            import tempfile
+            self._probe_dir_path = Path(tempfile.mkdtemp(prefix="pricing_probe_"))
+        return self._probe_dir_path
+
+    def cleanup(self) -> None:
+        """删除 collect 模式探针临时目录。"""
+        if self._probe_dir_path is not None:
+            import shutil
+            shutil.rmtree(self._probe_dir_path, ignore_errors=True)
+            self._probe_dir_path = None
+
+    def _s1_screenshot(self, name: str) -> str:
+        """S1 全选截图回调：select_all_after 落盘（result 冒泡页），其余探针。"""
+        return self._shot(name) if name == "select_all_after" else self._probe(name)
+
     # ==================================================================
     # Public API
     # ==================================================================
@@ -126,7 +154,7 @@ class RidePricingFSM:
         wait_t0 = self._wait_total
 
         # ── 刚进打车页（collect 模式从此开始保存截图）──
-        screenshots.append(self._shot("ride_page_entry"))
+        screenshots.append(self._probe("ride_page_entry"))
 
         # ── S0 + S1 ──
         t0, a0, w0 = time.time(), self._api_seconds(), self._wait_total
@@ -136,7 +164,7 @@ class RidePricingFSM:
         t0, a0, w0 = time.time(), self._api_seconds(), self._wait_total
         self._s1_tap_select_all()
         self._log_step_timing("S1 全选经济", t0, a0, w0)
-        screenshots.append(self._shot("after_select_all"))
+        screenshots.append(self._probe("after_select_all"))
 
         # ── 循环：逐个采集「全选经济」下的运力商（CAP-06）──
         collected = self._collect_suppliers(target_count, screenshots)
@@ -151,9 +179,9 @@ class RidePricingFSM:
             f"⏱ 计价采集总耗时 {self.stats['elapsed']:.1f}s | "
             f"API {self.stats['api_seconds']:.1f}s | 等待 {self.stats['wait_seconds']:.1f}s"
         )
-        screenshots.append(self._shot("all_done"))
+        screenshots.append(self._probe("all_done"))
 
-        shot_home = self._shot("before_home")
+        shot_home = self._probe("before_home")
         self._annotate_action_label(shot_home, "home", "Press HOME")
         self.adb.home()
         self._wait(0.5, "short_wait")
@@ -215,7 +243,7 @@ class RidePricingFSM:
                     # 如果不在打车页（例如弹窗/跳转），执行恢复流程
                     continue
 
-                screenshots.append(self._shot(f"popup_{supp_name}"))
+                screenshots.append(self._probe(f"popup_{supp_name}"))
                 if self._s3c_collect_detail_rules(supp_name):
                     self._log_step_timing(f"S3 「{supp_name}」", t0, a0, w0)
                     collected.append(supp_name)
@@ -245,7 +273,7 @@ class RidePricingFSM:
 
     def _s0_scroll_up(self) -> None:
         self._log("S0: 上滑拉出内容")
-        shot = self._shot("s0_before_scroll")
+        shot = self._probe("s0_before_scroll")
         sw, sh = self._screen_size
         x1, y1 = sw // 2, sh * 2 // 3
         x2, y2 = sw // 2, sh // 4
@@ -273,7 +301,7 @@ class RidePricingFSM:
                 label="全选经济",
                 screen_size=self._screen_size,
                 expected_region=self.collection_cfg.get("select_all_region"),
-                screenshot=self._shot,
+                screenshot=self._s1_screenshot,
                 stats=self.stats,
                 verbose=self.verbose,
                 wait_after_click=self.timing.get("after_tap_wait", 2.0),
@@ -296,7 +324,7 @@ class RidePricingFSM:
           economy_ended 截图中是否出现「特快车/特惠快车」「出租车」「优享型」等非经济型栏。
         """
         self._log("S2: 识别经济型供应商")
-        shot = self._shot("s2_suppliers")
+        shot = self._probe("s2_suppliers")
         desc = (
             "高德打车页面用灰色分割线划分多个栏（如「经济型」「特快车/特惠快车」「出租车」「优享型」等）。"
             "只列出「经济型」栏内（两道灰线之间）的运力商行，每行含车型名、预估价格和 ? 问号。"
@@ -369,7 +397,7 @@ class RidePricingFSM:
 
     def _s3a_tap_question(self, supplier: str) -> bool:
         self._log(f"    S3a: 点「{supplier}」问号")
-        shot = self._shot(f"q_{supplier}")
+        shot = self._probe(f"q_{supplier}")
         sw, sh = self._screen_size
         ref_path = str(Path(__file__).resolve().parents[3] / _REF_QUESTION_ICON)
 
@@ -396,7 +424,7 @@ class RidePricingFSM:
 
     def _s3c_collect_detail_rules(self, supplier: str) -> bool:
         self._log(f"    S3c: 进入「{supplier}」详细计价规则")
-        shot = self._shot(f"detail_entry_{supplier}")
+        shot = self._probe(f"detail_entry_{supplier}")
         sw, sh = self._screen_size
 
         # 1. 点击「查看详细计价规则」
@@ -413,7 +441,7 @@ class RidePricingFSM:
             self._log("    ⚠ 未找到详细计价规则入口")
             return False
 
-        self._shot(f"detail_page_{supplier}")
+        self._probe(f"detail_page_{supplier}")
 
         # ── 子步骤编号器 ──
         self._sub_seq = 0
@@ -444,7 +472,7 @@ class RidePricingFSM:
             self._wait(self.timing.get("tab_wait", 0.5), "tab_wait")
         else:
             # 首次进入详细计价页：LLM 记录标签坐标，后续直接复用
-            shot = self._shot(f"detail_before_{tab_label}_{supplier}")
+            shot = self._probe(f"detail_before_{tab_label}_{supplier}")
             desc = f"计价规则详情页。找「{tab_label}」标签页（与另一标签并列）。返回 bbox 和中心坐标。"
             self.stats["vlm_calls"] += 1
             result = self.grounder.ground(shot, desc, screen_w=sw, screen_h=sh)
@@ -456,8 +484,7 @@ class RidePricingFSM:
                 self._wait(self.timing.get("tab_wait", 0.5), "tab_wait")
 
         reached_end = self._scroll_to_bottom(tab_label, supplier)
-        self._sub_seq += 1
-        self._sub_shot(f"{tab_label}_bottom_{supplier}")
+        self._probe(f"{tab_label}_bottom_{supplier}")  # 底部帧探针（不落盘）
 
         # CAP-01/CAP-05: 到达终点（出现「预约用车」或页面不再变化）→ 回顶后继续后续流程。
         # 未到达（达到滑动上限）也回顶：保证顶部标签栏可见，可正常切换。
@@ -476,7 +503,7 @@ class RidePricingFSM:
         详细计价页 → 计价弹窗 → 打车页 的返回是确定性动作，无需视觉定位；
         保留返回前截图记录现场，等待收敛为 back_wait（默认 1.0s）。
         """
-        shot = self._shot(tag)
+        shot = self._probe(tag)
         self._annotate_action_label(shot, tag, "BACK key")
         self.adb.back()
         self._wait(self.timing.get("back_wait", 1.0), "back_wait")
@@ -494,11 +521,11 @@ class RidePricingFSM:
         self.adb.slide(cx, y1, cx, y2, self.collection_cfg.get("scroll_duration_ms", 500))
 
     def _scroll_to_bottom(self, tab: str, supplier: str) -> bool:
-        """每次滑动后判断退出条件：出现「预约用车」**或**页面不再变化（CAP-05）。
+        """每次滑动后判断退出条件：出现「预约用车」**或**页面不再变化（CAP-05/10）。
 
-        每轮：截图+标注 → 下滑 1/3 屏 → 等待稳定 → 再截图 →
-        - LLM 判断是否出现蓝色「预约用车」→ 出现即停止；
-        - 或本地像素比对：本次滑动前后页面基本无变化（已到底）→ 停止（防止 LLM 漏检）。
+        每轮只截 1 张图（滑动后状态，命名 scroll_{i+1}），同时用于：
+          LLM 标记检测 + 页面无变化比对（与上一帧）+ result 滚动帧；
+        不再同时保存 scroll/check 重复帧（CAP-10，debug/collect 一致）。
         循环有上限 max_swipes（collection.max_detail_swipes 可配）；达上限返回 False。
         """
         sw, sh = self._screen_size
@@ -507,22 +534,28 @@ class RidePricingFSM:
         y2 = y1 - amount
         max_swipes = int(self.collection_cfg.get("max_detail_swipes", 12))
 
+        # 基线帧 A0（进标签后、第一次滑动前）= result 的 scroll_0
+        prev = self._shot(f"{tab}_scroll_0_{supplier}")
+        self._annotate_action_label(prev, f"{tab}_scroll_0_{supplier}", "详情页顶部")
+
         for i in range(max_swipes):
-            shot = self._shot(f"{tab}_scroll_{i}_{supplier}")
-            self._annotate_swipe(shot, f"{tab}_scroll_{i}_{supplier}", sw // 2, y1, sw // 2, y2)
             self.adb.slide(sw // 2, y1, sw // 2, y2, 300)
             self._wait(self.collection_cfg.get("detail_scroll_wait", 0.3), "short_wait")
 
-            check = self._shot(f"{tab}_check_{i}_{supplier}")
+            # 每轮 1 张：滑动后状态 A_{i+1}，命名为 scroll_{i+1}
+            shot = self._shot(f"{tab}_scroll_{i + 1}_{supplier}")
+            self._annotate_swipe(shot, f"{tab}_scroll_{i + 1}_{supplier}", sw // 2, y1, sw // 2, y2)
+
             # 退出条件1：出现「预约用车」（LLM）
-            if self._detect_end_marker(check):
+            if self._detect_end_marker(shot):
                 self._log(f"      {tab}[{i}]: 出现「{_END_MARKER}」→ 到达终点，停止")
                 return True
-            # 退出条件2：页面不再变化（本次滑动前后基本一致 → 已到底）
-            if self._page_unchanged(shot, check):
+            # 退出条件2：页面不再变化（与上一帧对比 → 已到底）
+            if self._page_unchanged(prev, shot):
                 self._log(f"      {tab}[{i}]: 页面无变化 → 到达终点，停止")
                 return True
             self._log(f"      {tab}[{i}]: 未出现「{_END_MARKER}」且页面仍在变化 → 继续下滑")
+            prev = shot
 
         self._log(f"      {tab}: 滑动 {max_swipes} 次仍未满足退出条件，按上限退出")
         return False

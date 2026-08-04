@@ -55,7 +55,10 @@ def handle_pricing_collect(engine, step: dict) -> None:
         verbose=engine.verbose,
         mode=engine.mode,
     )
-    pricer.run()
+    try:
+        pricer.run()
+    finally:
+        pricer.cleanup()  # 删除 collect 模式探针临时目录
     # 合并 VLM / 耗时统计
     engine.stats["vlm_calls"] += pricer.stats.get("vlm_calls", 0)
     engine.stats["vlm_failures"] += pricer.stats.get("vlm_failures", 0)
