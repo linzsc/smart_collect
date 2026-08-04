@@ -105,8 +105,10 @@ class RidePricingFSM:
         return self._save(f"p{self._top_seq:02d}_{self._sub_seq:02d}_{name}")
 
     def _save(self, stem: str) -> str:
-        """保存截图。collect 模式：计价采集阶段(进入打车页后)全部保存，含打车页滑动与详细计价页。"""
-        path = str(self.output_dir / f"{stem}.jpg")
+        """保存裸截图到 output/screenshots/（collect 模式：计价采集阶段全部保存）。"""
+        shot_dir = self.output_dir / "screenshots"
+        shot_dir.mkdir(parents=True, exist_ok=True)
+        path = str(shot_dir / f"{stem}.jpg")
         self._ensure_screenshot(path)
         return path
 
@@ -630,7 +632,7 @@ class RidePricingFSM:
     def _do_annotate(self, image_path: str, tag: str, fn) -> None:
         if not self.debug_mode:
             return  # 标记图仅 debug 模式输出
-        anno_dir = self.output_dir / "_annotations"
+        anno_dir = self.output_dir / "annotations"  # 标记图子文件夹
         anno_dir.mkdir(parents=True, exist_ok=True)
         try:
             img = Image.open(image_path)

@@ -192,10 +192,11 @@ def test_screenshot_organizer():
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "output"
         res = Path(tmp) / "result"
-        out.mkdir()
+        shots = out / "screenshots"
+        shots.mkdir(parents=True)
 
         # 打车页（全选经济后）
-        (out / "p04_select_all_after.jpg").write_bytes(b"ride")
+        (shots / "p04_select_all_after.jpg").write_bytes(b"ride")
         # 各标签 × 各运力商 scroll_0..3
         cases = [
             ("p12", "工作日", "飞嘀打车"),
@@ -206,7 +207,7 @@ def test_screenshot_organizer():
         for prefix, tab, supplier in cases:
             base = int(prefix[1:])
             for i in range(4):
-                (out / f"p{base + i}_{tab}_scroll_{i}_{supplier}.jpg").write_bytes(b"s")
+                (shots / f"p{base + i}_{tab}_scroll_{i}_{supplier}.jpg").write_bytes(b"s")
         # 干扰文件：不应被复制
         for name in (
             "p16_工作日_check_3_飞嘀打车.jpg",
@@ -215,7 +216,7 @@ def test_screenshot_organizer():
             "p11_detail_before_工作日_飞嘀打车.jpg",
             "p05_after_select_all.jpg",
         ):
-            (out / name).write_bytes(b"x")
+            (shots / name).write_bytes(b"x")
 
         summary = collect_necessary_screenshots(out, res)
 
@@ -1008,8 +1009,9 @@ def test_collect_mode_engine_no_output():
         )
         try:
             engine.run()
-            assert list(out_dir.glob("*.jpg")) == [], "collect 模式导航阶段不应保存截图"
-            assert not (out_dir / "_annotations").exists(), "collect 模式不应输出标记图"
+            assert not (out_dir / "screenshots").exists() \
+                or list((out_dir / "screenshots").glob("*.jpg")) == [], "collect 模式导航阶段不应保存截图"
+            assert not (out_dir / "annotations").exists(), "collect 模式不应输出标记图"
             assert engine.scratch_dir is not None
             assert len(list(engine.scratch_dir.glob("*.jpg"))) >= 1, "VLM 临时截图应写入临时目录"
         finally:
@@ -1031,19 +1033,19 @@ def test_collect_mode_pricing_saves_ride_page():
             profile_cfg={}, output_dir=str(out_dir), mode="collect",
         )
         p1 = fsm._save("p01_ride_page_entry")   # 刚进打车页
-        assert Path(p1).parent == out_dir, "collect 模式刚进打车页截图应保存到 output"
+        assert Path(p1).parent == out_dir / "screenshots", "裸截图应保存到 output/screenshots"
         p2 = fsm._save("p02_s4_next")           # 打车页滑动
-        assert Path(p2).parent == out_dir, "collect 模式打车页滑动截图应保存到 output"
+        assert Path(p2).parent == out_dir / "screenshots", "裸截图应保存到 output/screenshots"
         p3 = fsm._save("p03_detail_page")       # 详细计价页
-        assert Path(p3).parent == out_dir, "collect 模式详细计价页截图应保存到 output"
+        assert Path(p3).parent == out_dir / "screenshots", "裸截图应保存到 output/screenshots"
 
-        # debug 默认：同样全部写入 output
+        # debug 默认：同样全部写入 output/screenshots
         fsm2 = RidePricingFSM(
             adb=mock_adb, grounder=MagicMock(), supplier="经济型",
             profile_cfg={}, output_dir=str(out_dir / "dbg"),
         )
         p4 = fsm2._save("p01_x")
-        assert Path(p4).parent == (out_dir / "dbg")
+        assert Path(p4).parent == (out_dir / "dbg" / "screenshots")
     return "PASS ✓"
 
 
@@ -1066,7 +1068,7 @@ def test_annotation_gated_by_mode():
             profile_cfg={}, output_dir=str(out1), mode="collect",
         )
         fsm1._do_annotate(str(img_path), "tag1", lambda d: None)
-        assert not (out1 / "_annotations" / "tag1.png").exists(), "collect 模式不应输出标记图"
+        assert not (out1 / "annotations" / "tag1.png").exists(), "collect 模式不应输出标记图"
 
         # debug：输出标记图
         out2 = Path(tmp) / "out_debug"
@@ -1075,7 +1077,7 @@ def test_annotation_gated_by_mode():
             profile_cfg={}, output_dir=str(out2),
         )
         fsm2._do_annotate(str(img_path), "tag2", lambda d: None)
-        assert (out2 / "_annotations" / "tag2.png").exists(), "debug 模式应输出标记图"
+        assert (out2 / "annotations" / "tag2.png").exists(), "debug 模式应输出标记图"
     return "PASS ✓"
 
 

@@ -69,7 +69,8 @@ def collect_necessary_screenshots(
         log(f"  ⚠ 结果整理: 输出目录不存在 {out}，跳过")
         return {"result_dir": str(res), "ride_pages": [], "groups": {}, "copied": 0}
 
-    jpgs = sorted(out.glob("*.jpg"))
+    shots_dir = out / "screenshots"  # 裸截图统一在 output/screenshots/
+    jpgs = sorted(shots_dir.glob("*.jpg")) if shots_dir.is_dir() else []
     ride_pages = [p for p in jpgs if ride_page_keyword in p.name]
     if not ride_pages:
         log(f"  ⚠ 结果整理: 未找到打车页截图（含 '{ride_page_keyword}'），跳过")

@@ -568,11 +568,15 @@ class FlowEngine:
         raise RuntimeError("无法获取屏幕尺寸")
 
     def _screenshot(self, name: str, save: bool | None = None) -> str:
-        """截图。save=None: debug 模式保存到 output，collect 模式存临时目录。"""
+        """截图。save=None: debug 模式保存到 output/screenshots，collect 模式存临时目录。"""
         self._shot_seq += 1
         if save is None:
             save = self.debug_mode
-        target = self.output_dir if save else (self.scratch_dir or self.output_dir)
+        if save:
+            target = self.output_dir / "screenshots"  # 裸截图子文件夹
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target = self.scratch_dir or self.output_dir
         path = str(target / f"{self._shot_seq:02d}_{name}.jpg")
         for attempt in range(3):
             if self.adb.get_screenshot(path):
@@ -584,7 +588,7 @@ class FlowEngine:
     def _annotate(self, image_path, step, bbox, cx, cy, attempt=0):
         if not self.debug_mode:
             return  # 标记图仅 debug 模式输出
-        anno_dir = self.output_dir / "_annotations"
+        anno_dir = self.output_dir / "annotations"  # 标记图子文件夹
         anno_dir.mkdir(parents=True, exist_ok=True)
         stem = Path(image_path).stem
         tag = f"{stem}_attempt{attempt}" if attempt else stem
