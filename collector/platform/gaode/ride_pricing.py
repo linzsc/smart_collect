@@ -26,6 +26,8 @@ from collector.infrastructure.vision.vlm_grounder import VLMGrounder
 
 _REF_QUESTION_ICON = "assets/button_to_price.png"
 _SKIP_SUPPLIERS = {"出租车", "优享"}
+# 详细计价页终点标记：出现蓝色「预约用车」即停止滚动（CAP-01）
+_END_MARKER = "预约用车"
 
 
 class RidePricingFSM:
@@ -351,11 +353,11 @@ class RidePricingFSM:
         self._sub_seq = 0
 
         # 2. 工作日
-        self._log("      工作日 → 下滑到底 → 回顶")
+        self._log("      工作日 → 下滑至出现「预约用车」→ 回顶")
         self._tap_tab_and_scroll("工作日", supplier)
 
         # 3. 休息日
-        self._log("      休息日 → 下滑到底")
+        self._log("      休息日 → 下滑至出现「预约用车」")
         self._tap_tab_and_scroll("休息日", supplier)
 
         # 4. 返回 ×2: 详细计价页 → 计价弹窗 → 打车页
@@ -377,11 +379,15 @@ class RidePricingFSM:
             self.adb.click(cx, cy)
             self._wait(1.0, "tab_wait")
 
-        self._scroll_to_bottom(tab_label, supplier)
+        detected = self._scroll_to_bottom(tab_label, supplier)
         self._sub_seq += 1
         self._sub_shot(f"{tab_label}_bottom_{supplier}")
 
+        # CAP-01: 检测到「预约用车」→ 回顶后继续后续流程（切换下一标签）。
+        # 未检测到（达到滑动上限）也回顶：保证顶部标签栏可见，可正常切换。
         if tab_label == "工作日":
+            state = "检测到「预约用车」" if detected else "未检测到「预约用车」(达上限兜底)"
+            self._log(f"      {tab_label}: {state} → 回顶")
             self._scroll_to_top(tab_label, supplier)
 
     # ==================================================================
@@ -416,8 +422,13 @@ class RidePricingFSM:
         self._annotate_swipe(shot, tag, cx, y1, cx, y2)
         self.adb.slide(cx, y1, cx, y2, self.collection_cfg.get("scroll_duration_ms", 500))
 
-    def _scroll_to_bottom(self, tab: str, supplier: str) -> None:
-        """每步截图+标注 → 下滑 1/3 屏 → 每 3 步 VLM 判断到底."""
+    def _scroll_to_bottom(self, tab: str, supplier: str) -> bool:
+        """每次滑动后调用 LLM 判断是否出现「预约用车」（详情页终点，CAP-01）。
+
+        每轮：截图+标注 → 下滑 1/3 屏 → 等待稳定 → 再截图 →
+        LLM 判断是否出现蓝色「预约用车」→ 出现即返回 True / 未出现继续。
+        循环有上限 max_swipes，防止无限滑动；达上限仍未检测到返回 False。
+        """
         sw, sh = self._screen_size
         amount = sh // 3
         y1 = sh * 3 // 4
@@ -430,15 +441,31 @@ class RidePricingFSM:
             self.adb.slide(sw // 2, y1, sw // 2, y2, 300)
             self._wait(0.5, "short_wait")
 
-            if i >= 2 and (i % 3 == 0 or i == max_swipes - 1):
-                check = self._shot(f"{tab}_check_{i}_{supplier}")
-                desc = "判断当前是否已到页面最底部。只输出 YES 或 NO。"
-                self.stats["vlm_calls"] += 1
-                resp = self.grounder.query_text(check, desc)
-                raw = resp.get("raw_response", "").strip().upper()
-                self._log(f"      {tab}[{i}]: {'BOTTOM' if 'YES' in raw else '↓'}")
-                if "YES" in raw:
-                    break
+            # 每次滑动后都调用 LLM 判断「预约用车」是否出现（CAP-01）
+            check = self._shot(f"{tab}_check_{i}_{supplier}")
+            if self._detect_end_marker(check):
+                self._log(f"      {tab}[{i}]: 出现「{_END_MARKER}」→ 到达终点，停止")
+                return True
+            self._log(f"      {tab}[{i}]: 未出现「{_END_MARKER}」→ 继续下滑")
+
+        self._log(f"      {tab}: 滑动 {max_swipes} 次仍未出现「{_END_MARKER}」，按上限退出")
+        return False
+
+    def _detect_end_marker(self, image_path: str) -> bool:
+        """调用 LLM 判断详细计价页截图是否已出现蓝色「预约用车」。
+
+        返回 True 表示出现（详情页内容已采集完整，可终止滚动）。
+        """
+        desc = (
+            f"这是高德打车「详细计价规则」页面截图。"
+            f"请判断页面上是否出现了蓝色文字「{_END_MARKER}」。"
+            "只输出 YES 或 NO。"
+        )
+        self.stats["vlm_calls"] += 1
+        resp = self.grounder.query_text(image_path, desc)
+        raw = resp.get("raw_response", "").strip().upper()
+        self._log(f"      LLM[{_END_MARKER}]: {raw[:60]}")
+        return "YES" in raw
 
     def _scroll_to_top(self, tab: str, supplier: str) -> None:
         """快速回顶 3 次大段上滑，不截图不标注（纯机械操作）."""

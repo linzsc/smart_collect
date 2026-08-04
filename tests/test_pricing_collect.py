@@ -152,6 +152,31 @@ def test_extract_center_none():
     return "PASS ✓"
 
 
+def test_detect_end_marker():
+    """CAP-01: _detect_end_marker 解析 LLM 的 YES/NO 响应，并计入 vlm_calls."""
+    import tempfile
+
+    from collector.platform.gaode.ride_pricing import RidePricingFSM
+
+    with tempfile.TemporaryDirectory() as tmp:
+        fsm = RidePricingFSM(
+            adb=MagicMock(), grounder=MagicMock(), supplier="x",
+            profile_cfg={}, output_dir=str(Path(tmp) / "out"), verbose=False,
+        )
+        fsm.stats["vlm_calls"] = 0
+
+        # YES → 出现「预约用车」
+        fsm.grounder.query_text.return_value = {"raw_response": "YES，出现了蓝色预约用车", "success": True}
+        assert fsm._detect_end_marker("x.jpg") is True
+        assert fsm.stats["vlm_calls"] == 1
+
+        # NO → 未出现
+        fsm.grounder.query_text.return_value = {"raw_response": "NO，未出现预约用车", "success": True}
+        assert fsm._detect_end_marker("x.jpg") is False
+        assert fsm.stats["vlm_calls"] == 2
+    return "PASS ✓"
+
+
 # ======================================================================
 # Suite 2: FSM 完整流程 Mock 测试
 # ======================================================================
@@ -167,8 +192,8 @@ def test_fsm_full_flow():
       3. S2: query_text(识别供应商) → ["快车", "特惠快车"]
       4. S3a[快车]: ground(点问号, ref=button_to_price.png) → click
       5. S3c[快车]: ground(查看详细计价规则) → click
-         → ground(工作日tab) → click → slide×N → query_text(到底?) → slide×3(回顶)
-         → ground(休息日tab) → click → slide×N → query_text(到底?)
+         → ground(工作日tab) → click → 每次滑动后 query_text(预约用车?) → 出现即停 → slide×3(回顶)
+         → ground(休息日tab) → click → 每次滑动后 query_text(预约用车?) → 出现即停
          → ground(返回箭头) → click → ground(返回箭头) → click
       6. S3a[特惠快车]: 同上
       7. S3c[特惠快车]: 同上
@@ -240,6 +265,31 @@ def test_fsm_full_flow():
     # 4. S2 供应商识别: query_text 应被调用
     query_calls = mock_grounder.query_text.call_args_list
     assert len(query_calls) >= 1, f"S2: query_text 至少 1 次, 实际 {len(query_calls)}"
+
+    # 4b. CAP-01: 详细计价页每次滑动后都调用 LLM 判断「预约用车」
+    marker_calls = [
+        c for c in query_calls
+        if len(c.args) > 1 and "预约用车" in str(c.args[1])
+    ]
+    print(f"  [Mock FSM] 「预约用车」LLM 检测: {len(marker_calls)} 次")
+    # 每个供应商: 工作日 4 次(i=0..3) + 休息日 3 次(i=0..2) = 7 次
+    assert len(marker_calls) == 14, \
+        f"应有 2 供应商 × 7 次「预约用车」检测, 实际 {len(marker_calls)}"
+
+    # 4c. CAP-01: 出现「预约用车」即终止滚动 → 滑动次数可精确预期
+    #     S0(1) + 2 × (工作日 4 + 回顶 3 + 休息日 3) = 21
+    assert len(slide_calls) == 21, \
+        f"「预约用车」出现应终止滚动, 预期 21 次滑动, 实际 {len(slide_calls)}"
+
+    # 4d. CAP-01: 检测到「预约用车」后触发回顶（上滑手势 y1<y2）
+    #     _scroll_to_top 每个供应商 × 工作日 3 次 = 6 次
+    up_swipes = [
+        c for c in slide_calls
+        if len(c.args) >= 4 and c.args[1] < c.args[3]
+    ]
+    print(f"  [Mock FSM] 检测到后回顶上滑: {len(up_swipes)} 次")
+    assert len(up_swipes) == 6, \
+        f"检测到「预约用车」后应回顶 2×3=6 次上滑, 实际 {len(up_swipes)}"
 
     # 5. S3a 问号: ground 中应有 ref_image=button_to_price.png
     question_calls = [
@@ -378,25 +428,24 @@ def _build_query_text_side_effect():
 
     调用顺序:
       S2-1: 识别供应商 → ["快车", "特惠快车"]
-      S3c-工作日-scroll: 每 3 步 VLM 判断到底 → NO, NO, YES
-      S3c-休息日-scroll: 每 3 步 VLM 判断到底 → NO, YES
+      S3c-工作日-scroll: 每次滑动后 LLM 判断「预约用车」→ NO, NO, NO, YES (i=0..3)
+      S3c-休息日-scroll: 每次滑动后 LLM 判断「预约用车」→ NO, NO, YES (i=0..2)
       ... 重复 2 个供应商
     """
     SUPPLIERS_RESP = {
         "raw_response": '["快车", "特惠快车"]',
         "success": True,
     }
-    NOT_BOTTOM = {"raw_response": "NO, 还没到底部", "success": True}
-    IS_BOTTOM = {"raw_response": "YES, 已到达页面底部", "success": True}
+    NOT_MARKER = {"raw_response": "NO, 未出现预约用车", "success": True}
+    IS_MARKER = {"raw_response": "YES, 出现了蓝色预约用车", "success": True}
 
     sequence = [SUPPLIERS_RESP]  # S2 只调用 1 次
-    # 每个供应商: 工作日 scroll checks + 休息日 scroll checks
+    # 每个供应商: 工作日每次滑动检测 + 休息日每次滑动检测
     for _ in range(2):
-        sequence.append(NOT_BOTTOM)   # 工作日 check 3
-        sequence.append(NOT_BOTTOM)   # 工作日 check 6
-        sequence.append(IS_BOTTOM)    # 工作日 check 9 → 到底
-        sequence.append(NOT_BOTTOM)   # 休息日 check 3
-        sequence.append(IS_BOTTOM)    # 休息日 check 6 → 到底
+        sequence.extend([NOT_MARKER] * 3)  # 工作日 i=0,1,2 → 未出现
+        sequence.append(IS_MARKER)         # 工作日 i=3 → 出现「预约用车」，终止
+        sequence.extend([NOT_MARKER] * 2)  # 休息日 i=0,1 → 未出现
+        sequence.append(IS_MARKER)         # 休息日 i=2 → 出现「预约用车」，终止
 
     seq_iter = iter(sequence)
 
@@ -895,6 +944,7 @@ def main() -> None:
         ("_extract_center bbox+center", test_extract_center_from_bbox_and_center),
         ("_extract_center only center", test_extract_center_only_center),
         ("_extract_center None",      test_extract_center_none),
+        ("CAP-01 预约用车检测解析",   test_detect_end_marker),
     ]
     for label, fn in suite1:
         try:
