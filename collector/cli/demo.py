@@ -45,6 +45,21 @@ from collector.platform.registry import available_platforms, get_platform
 from collector.workflows.flow_engine import FlowEngine
 
 
+def _build_ocr_extractor(args):
+    """构建 OCR 提取器；--no-ocr 返回 None（纯 VLM）。
+
+    --ocr-profile dev 时切 OCR_PROFILE=DEV（走 10.196.104.7:8068，本机可直连）。
+    """
+    if args.no_ocr:
+        print("[Setup] OCR 已关闭（--no-ocr），预约用车检测使用 VLM")
+        return None
+    if args.ocr_profile == "dev":
+        import os
+        os.environ["OCR_PROFILE"] = "DEV"
+    print(f"[Setup] OCR 环境: {args.ocr_profile}（{__import__('collector.infrastructure.vision.ocr_client', fromlist=['get_ocr_url']).get_ocr_url()}）")
+    return OcrTextExtractor()
+
+
 def _peek_platform_name(argv: list[str]) -> str:
     """从 argv 预扫描 --platform 的值（未传则用默认 gaode）。"""
     for i, a in enumerate(argv):
@@ -94,7 +109,9 @@ def main() -> None:
     parser.add_argument("--mode", default="debug", choices=["debug", "collect"],
                         help="debug: 每步截图+标记图；collect: 仅保存详细计价页截图 (默认: debug)")
     parser.add_argument("--no-ocr", action="store_true",
-                        help="关闭本地 OCR（默认开启，用于「预约用车」检测；OCR_PROFILE=DEV 切环境）")
+                        help="关闭本地 OCR（默认开启，用于「预约用车」检测）")
+    parser.add_argument("--ocr-profile", default="prod", choices=["prod", "dev"],
+                        help="OCR 环境：prod=10.66.96.24（仅内网）/ dev=10.196.104.7:8068（本机可直连，默认 prod）")
 
     # ── 预扫描 --platform，注册平台自己的参数（如 gaode 的 --address/--pickup），
     #    保证 `--help` 也能完整展示平台参数 ──
@@ -155,7 +172,7 @@ def main() -> None:
         profile_cfg=profile_cfg,
         platform_step_handlers=platform.step_handlers,
         mode=args.mode,
-        text_extractor=None if args.no_ocr else OcrTextExtractor(),
+        text_extractor=_build_ocr_extractor(args),
     )
 
     t_start = time.time()
