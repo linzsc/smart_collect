@@ -189,6 +189,8 @@ class FlowEngine:
                     self._do_wait(step)
                 elif step_type == "back":
                     self._do_back(step)
+                elif step_type == "close_app":
+                    self._do_close_app(step)
                 elif step_type == "screenshot":
                     self._do_screenshot(step)
                 elif step_type == "extract_list":
@@ -794,6 +796,15 @@ class FlowEngine:
         name = sub.get("name", path.name)
         self._log(f"── 子流程: {name} ──")
         self._run_steps(sub.get("steps", []))
+
+    def _do_close_app(self, step: dict) -> None:
+        """采集完成：关闭（kill）应用，而非仅返回桌面。"""
+        pkg = self._render(step.get("package", "")) or self.package
+        if not pkg:
+            self._log("  ⚠ close_app: 无 package，跳过")
+            return
+        self.adb.force_stop(pkg)
+        self._log(f"  ✖ 关闭应用（kill）: {pkg}")
 
     def _do_verify(self, step: dict) -> None:
         """后置校验：expect_state（状态断言）/ handler（平台校验器）/ activity_prefix（ADB 前台 Activity）。

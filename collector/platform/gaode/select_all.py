@@ -327,6 +327,8 @@ def ensure_all_selected(
     if state == CheckboxState.CHECKED:
         target.state = CheckboxState.CHECKED.value
         _log("已勾选，跳过点击")
+        # 已勾选也截打车页证据（RES-01 冒泡页需要 select_all_after）
+        screenshot("select_all_after")
         return target
 
     # ── 第 2 轮：点击后重验同一个主勾选框 ──

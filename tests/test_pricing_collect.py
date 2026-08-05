@@ -490,6 +490,8 @@ def test_v2_flow_end_to_end():
             f"每次回打车页应检查全选经济, 实际 {mock_ensure.call_count} 次"
         # 8. 不重复采集：每个供应商恰好被采集一次（_processed 无重复）
         assert engine.state["_processed"] == {"曹操出行", "阳光出行"}, engine.state["_processed"]
+        # 9. 采集完成：关闭（kill）应用
+        assert any(a.get("type") == "force_stop" for a in adb.action_log),             "采集完成应 close_app（force-stop）"
         engine.cleanup()
     return "PASS ✓"
 

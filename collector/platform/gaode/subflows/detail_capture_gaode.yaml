@@ -26,9 +26,9 @@ steps:
   # ── S3c: OCR 识别「查看详细计价规则」并点击（零 LLM，不调 VLM）──
   - id: "detail_btn"
     type: "ocr_click"
-    description: "OCR 识别「查看详细计价规则」并点击"
+    description: "OCR 识别「查看计价规则」并点击"
     optional: true
-    text: "查看详细计价规则"
+    text: "查看计价规则"
     max_retries: 2
     retry_wait: 1.0
     wait_after: 1.5

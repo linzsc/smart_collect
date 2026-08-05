@@ -102,3 +102,8 @@ steps:
   - id: "organize_result"
     type: "pricing_result_organize"
     description: "筛选必要截图并聚合到 result/"
+
+  # ── 采集完成：关闭（kill）应用，而非仅返回桌面 ──
+  - id: "close_app"
+    type: "close_app"
+    description: "采集完成，关闭（kill）高德应用"

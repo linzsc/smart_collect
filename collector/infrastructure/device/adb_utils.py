@@ -147,6 +147,11 @@ class AdbTools:
         )
         time.sleep(self.action_delay)
 
+    def force_stop(self, package: str) -> None:
+        """Force-stop（kill）指定应用。"""
+        self._run(f"shell am force-stop {package}")
+        time.sleep(self.action_delay)
+
     def type(self, text: str) -> None:
         """Type text via ADB Keyboard (supports CJK + Latin).
 
@@ -295,3 +300,7 @@ class MockAdbTools(AdbTools):
     def home(self) -> None:
         self.action_log.append({"type": "home"})
         print(f"  [MOCK ADB] Home")
+
+    def force_stop(self, package: str) -> None:
+        self.action_log.append({"type": "force_stop", "package": package})
+        print(f"  [MOCK ADB] Force-stop {package}")

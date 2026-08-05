@@ -259,14 +259,16 @@ def _run_ensure(tmp, checked_seq, click_center=None):
 
 
 def test_ensure_all_selected_already_checked():
-    """已勾选 → 不点击，直接成功。"""
+    """已勾选 → 不点击，直接成功；但也要截 select_all_after 作为打车页证据（RES-01 冒泡页）。"""
     import tempfile
+    from pathlib import Path as _P
 
     with tempfile.TemporaryDirectory() as tmp:
         adb, result, err = _run_ensure(tmp, [CheckboxState.CHECKED])
         assert err is None, f"不应失败: {err}"
         assert result.state == CheckboxState.CHECKED.value
         assert not adb.click.called, "已勾选不应点击"
+        assert (_P(tmp) / "select_all_after.jpg").exists(), "已勾选也应截 select_all_after"
     return "PASS ✓"
 
 
