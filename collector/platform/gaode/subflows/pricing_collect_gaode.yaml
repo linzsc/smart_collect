@@ -1,7 +1,7 @@
 # 计价采集子流程（YAML 原语版）
 # v2 主场景：S0 上滑 → 全选经济 → verify →
-# 外层循环：每次回到打车页都【重新识别供应商（不重复采集）+ 检查全选经济】，
-# 再采集当前屏第一个新供应商（subflow），下滑看更多 → 结果整理。
+# 外层循环：每次【重新识别当前屏供应商（不重复采集）+ 检查全选经济】，
+# 再采集当前屏第一个新供应商（subflow）；本轮无新供应商 → 小幅下滑看下一段 → 结果整理。
 # 依赖平台 handler：select_all / s2_list_suppliers / pricing_loop_done /
 #                 mark_supplier_processed / pricing_result_organize
 name: "pricing_collect-高德-计价采集"
@@ -31,10 +31,22 @@ steps:
     expect_state:
       select_all_done: true
 
+  # ② 进入循环前，点击左侧导航「经济」锚定经济型列表开头（仅此一次）
+  #    ⚠️ 不在循环内点击：循环内点击会把 s4_scroll 的下滑位置重置回列表顶部，
+  #       导致永远滚不到下面的新运力商（重复点击、无意义空转）
+  - id: "jump_economy"
+    type: "ground_click"
+    description: "点击左侧导航「经济」，定位到经济型列表开头（仅进入循环前执行一次）"
+    ground:
+      element_desc: "页面左侧竖排车型导航栏中的「经济」分类标签（与「舒适」「品质」「优享」等并列，当前可能高亮）。返回 bbox 和中心坐标。"
+      retry_alt_descs:
+        - "左侧导航栏中的「经济」选项，点击后车型列表定位到经济型开头"
+    wait_after: 0.5
+
   # 外层循环：每次回到打车页都重新识别供应商 + 检查全选经济，再采集第一个新供应商
   - id: "supplier_loop"
     type: "loop_until"
-    description: "每次回打车页重新识别供应商并检查全选经济，逐个采集（不重复）；终止=满10个 或 经济型栏(出租车/特快车/优享型之上)采完"
+    description: "每轮重新识别当前屏供应商并检查全选经济，逐个采集（不重复）；无新供应商则下滑看下一段；终止=满10个 或 经济型栏(出租车/特快车/优享型之上)采完 或 下滑达上限仍无新供应商"
     until_handler: "pricing_loop_done"
     max_rounds: 15
     steps:
@@ -50,23 +62,14 @@ steps:
         expect_state:
           select_all_done: true
 
-      # ② 每轮点击左侧导航「经济」：锚定经济型列表（应对价格变化导致的排序变化）
-      - id: "jump_economy"
-        type: "ground_click"
-        description: "点击左侧导航「经济」，定位到经济型列表开头"
-        ground:
-          element_desc: "页面左侧竖排车型导航栏中的「经济」分类标签（与「舒适」「品质」「优享」等并列，当前可能高亮）。返回 bbox 和中心坐标。"
-          retry_alt_descs:
-            - "左侧导航栏中的「经济」选项，点击后车型列表定位到经济型开头"
-        wait_after: 0.5
-
-      # ③ 重新识别当前屏供应商（列表可能变化；只返回未采集过的）
+      # ② 重新识别当前屏供应商（下滑后列表位置保留；只返回未采集过的）
       - id: "s2_list"
         type: "extract_list"
         description: "识别当前屏经济型运力商（未采集）"
         handler: "s2_list_suppliers"
 
-      # ④ 每轮只采集当前屏第一个未采集供应商；采集后回到打车页，下一轮重新识别
+      # ③ 每轮只采集当前屏第一个未采集供应商；采集后回到打车页，下一轮重新识别
+      #    subflow 路径由 {{.DetailSubflow}} 决定：full=detail_capture（完整采集）/ test=detail_entry_test（轻量测试）
       - id: "supplier_each"
         type: "for_each"
         description: "采集当前运力商（subflow）并标记已处理"
@@ -76,12 +79,13 @@ steps:
         max: 1
         steps:
           - type: "subflow"
-            file: "../subflows/detail_capture_gaode.yaml"
+            file: "../subflows/{{.DetailSubflow}}"
           - id: "mark_processed"
             type: "mark_supplier_processed"
             description: "标记当前运力商已采集（防重复）"
 
-      # ⑤ 本轮无新供应商 → 小幅下滑 ≤1/3 屏（每屏约 6-8 个运力商，重叠靠 _processed 去重）
+      # ④ 本轮无新供应商 → 小幅下滑 ≤1/3 屏（每屏约 6-8 个运力商，重叠靠 _processed 去重）
+      #    下一轮直接 s2_list 识别下滑后的新屏：有新的就点，不再点左侧导航
       - id: "s4_scroll"
         type: "scroll"
         description: "当前屏无新运力商时小幅下滑看下一段"

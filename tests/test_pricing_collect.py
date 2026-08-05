@@ -31,6 +31,7 @@ RidePricingFSM 已删除，计价采集由 YAML 子流程表达：
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -383,7 +384,8 @@ def test_v2_flow_end_to_end():
             from collector.workflows.flow_engine import FlowEngine
             engine = FlowEngine(
                 adb=adb, grounder=grounder, flow_path=str(v2_path),
-                vars_={"Address": "北京西站", "Pickup": "西北旺万象汇"},
+                vars_={"Address": "北京西站", "Pickup": "西北旺万象汇",
+                       "DetailSubflow": "detail_capture_gaode.yaml"},
                 output_dir=str(Path(tmp) / "out"),
                 verbose=False, profile_cfg=profile_cfg,
                 platform_step_handlers=platform.step_handlers,
@@ -420,6 +422,173 @@ def test_v2_flow_end_to_end():
             f"每次回打车页应检查全选经济, 实际 {mock_ensure.call_count} 次"
         # 8. 不重复采集：每个供应商恰好被采集一次（_processed 无重复）
         assert engine.state["_processed"] == {"曹操出行", "阳光出行"}, engine.state["_processed"]
+        engine.cleanup()
+    return "PASS ✓"
+
+
+
+
+def test_v2_flow_light_mode():
+    """--capture-mode test：DetailSubflow=detail_entry_test，只进入计价页不滚动。"""
+    import tempfile as _tf
+
+    from collector.platform.gaode.platform import build_platform
+
+    v2_path = _PROJECT_ROOT / "collector/platform/gaode/flows/v2_gaode.yaml"
+
+    def _ground_side_effect(image_path, element_desc, **kwargs):
+        d = str(element_desc)
+        if "查看详细计价规则" in d:
+            return _hit(540, 1800)
+        if "问号" in d or "'?'" in d:
+            return _hit(800, 1200)
+        if "经济" in d and "导航" in d:
+            return _hit(180, 400)
+        if "候选" in d:
+            return _hit(540, 800)
+        if "你要去哪儿" in d or "输入目的地" in d:
+            return _hit(540, 500)
+        if "上车点" in d:
+            return _hit(540, 400)
+        if "打车" in d:
+            return _hit(540, 2100)
+        return _miss()
+
+    def _query_side_effect(image_path, prompt):
+        p = str(prompt)
+        if "预约用车" in p:
+            return {"raw_response": "NO", "success": True}
+        return {"raw_response": '{"suppliers": ["曹操出行", "阳光出行"], "economy_ended": true}',
+                "success": True}
+
+    platform = build_platform()
+    profile_cfg = platform.load_profile()
+
+    with _tf.TemporaryDirectory() as tmp:
+        adb = _MockAdbFixed()
+        grounder = MagicMock()
+        grounder.ground.side_effect = _ground_side_effect
+        grounder.query_text.side_effect = _query_side_effect
+
+        from collector.workflows.flow_engine import FlowEngine
+        engine = None
+        with patch("collector.platform.gaode.select_all.ensure_all_selected",
+                   return_value=MagicMock()):
+            engine = FlowEngine(
+                adb=adb, grounder=grounder, flow_path=str(v2_path),
+                vars_={"Address": "北京西站", "Pickup": "西北旺万象汇",
+                       "DetailSubflow": "detail_entry_test_gaode.yaml"},
+                output_dir=str(Path(tmp) / "out"),
+                verbose=False, profile_cfg=profile_cfg,
+                platform_step_handlers=platform.step_handlers,
+                mode="debug",
+            )
+            with patch("time.sleep"):
+                engine.run()
+
+        assert engine.state["_processed"] == {"曹操出行", "阳光出行"}, engine.state["_processed"]
+        shots = sorted(p.name for p in (Path(tmp) / "out" / "screenshots").glob("*.jpg"))
+        assert any("detail_shot_曹操出行" in n for n in shots), shots
+        assert any("detail_shot_阳光出行" in n for n in shots), shots
+        assert not any("_工作日_scroll_" in n for n in shots), shots
+        assert not any("_休息日_scroll_" in n for n in shots), shots
+        engine.cleanup()
+    return "PASS ✓"
+
+def test_v2_flow_scroll_boundary_first_screen_all_collected():
+    """下滑边界（修复后）：第一屏运力商全部已采集 → 触发 s4_scroll 下滑 →
+    下滑后识别到新运力商 → 逐个采集；jump_economy（左侧导航「经济」）仅循环前执行 1 次，
+    不再每轮点击把滚动位置重置回顶部（避免重复点击/永远滚不到新运力商）。"""
+    import tempfile as _tf
+
+    from collector.platform.gaode.platform import build_platform
+
+    v2_path = _PROJECT_ROOT / "collector/platform/gaode/flows/v2_gaode.yaml"
+    FIRST_SCREEN = ["星徽出行", "火箭出行", "AA出行", "旗妙出行",
+                    "曹操出行", "飞嘀打车", "阳光出行", "首汽约车"]
+    BELOW = ["滴滴出行", "T3出行"]   # 下滑后出现的新运力商
+
+    def _ground_side_effect(image_path, element_desc, **kwargs):
+        d = str(element_desc)
+        if "查看详细计价规则" in d:
+            return _hit(540, 1800)
+        if "经济" in d and "导航" in d:   # jump_economy：左侧导航「经济」
+            return _hit(180, 400)
+        if "问号" in d or "'?'" in d:
+            return _hit(800, 1200)
+        if "候选" in d:
+            return _hit(540, 800)
+        if "你要去哪儿" in d or "输入目的地" in d:
+            return _hit(540, 500)
+        if "上车点" in d:
+            return _hit(540, 400)
+        if "搜索" in d:
+            return _hit(950, 200)
+        if "打车" in d:
+            return _hit(540, 2100)
+        return _miss()
+
+    s2_calls = {"n": 0}
+
+    def _query_side_effect(image_path, prompt):
+        p = str(prompt)
+        if "经济型" not in p:   # 非 S2（如 YES/NO 判断）→ 兜底返回 NO
+            return {"raw_response": "NO", "success": True}
+        s2_calls["n"] += 1
+        n = s2_calls["n"]
+        if n == 1:
+            # 第一屏：识别到 8 个，全部预置为已采集 → 本轮 0 新 → 触发 s4_scroll 下滑
+            resp = {"suppliers": FIRST_SCREEN, "economy_ended": False}
+        else:
+            # 下滑后：出现 2 个新运力商；随 _processed 增长，逐轮只剩余未采集的
+            resp = {"suppliers": FIRST_SCREEN + BELOW, "economy_ended": False}
+        return {"raw_response": json.dumps(resp, ensure_ascii=False), "success": True}
+
+    platform = build_platform()
+    profile_cfg = platform.load_profile()
+
+    with _tf.TemporaryDirectory() as tmp:
+        adb = _MockAdbFixed()
+        grounder = MagicMock()
+        grounder.ground.side_effect = _ground_side_effect
+        grounder.query_text.side_effect = _query_side_effect
+
+        with patch("collector.platform.gaode.select_all.ensure_all_selected",
+                   return_value=MagicMock()):
+            from collector.workflows.flow_engine import FlowEngine
+            engine = FlowEngine(
+                adb=adb, grounder=grounder, flow_path=str(v2_path),
+                vars_={"Address": "北京西站", "Pickup": "西北旺万象汇",
+                       "DetailSubflow": "detail_entry_test_gaode.yaml"},
+                output_dir=str(Path(tmp) / "out"),
+                verbose=False, profile_cfg=profile_cfg,
+                platform_step_handlers=platform.step_handlers,
+                mode="debug",
+            )
+            # 边界预置：第一屏识别到的运力商全部视为已采集
+            engine.state["_processed"] = set(FIRST_SCREEN)
+            with patch("time.sleep"):
+                engine.run()
+
+        processed = engine.state["_processed"]
+        # 1) 收集完整：8(预置) + 2(下滑后新识别) = 10，无重复
+        assert processed == set(FIRST_SCREEN + BELOW), f"processed={processed}"
+        assert len(processed) == 10
+        # 2) 下滑恰好 1 次（第一屏全已采 → s4_scroll）；scroll_count 计数正确
+        # s4_scroll 下滑 duration=500ms（s0 上滑是 800ms，排除）
+        slides = [e for e in adb.action_log
+                  if e.get("type") == "adb_cmd" and "input swipe" in e.get("args", "")
+                  and e["args"].rstrip().endswith(" 500")]
+        assert len(slides) == 1, f"应仅 s4 下滑 1 次, 实际 {len(slides)} 次"
+        assert engine.state.get("scroll_count") == 1, engine.state.get("scroll_count")
+        # 3) jump_economy 仅循环前执行 1 次（修复点：不再每轮点击重置滚动位置）
+        jump_grounds = [c for c in grounder.ground.call_args_list
+                        if "经济" in str(c.args[1]) and "导航" in str(c.args[1])]
+        assert len(jump_grounds) == 1, f"jump_economy 应仅 1 次, 实际 {len(jump_grounds)}"
+        # 4) S2 识别 3 次：第一屏 1 次 + 下滑后 2 轮（各识别并采集 1 个）
+        assert s2_calls["n"] == 3, f"S2 应 3 次, 实际 {s2_calls['n']}"
+        # 5) 每轮都检查全选经济（≥3 次）
+        assert engine.state.get("select_all_done") is True
         engine.cleanup()
     return "PASS ✓"
 
@@ -809,6 +978,20 @@ def main() -> None:
         print(f"  [{test_v2_flow_end_to_end()}] v2 计价采集全流程")
     except Exception as e:
         print(f"  [FAIL ✗] v2 端到端: {e}")
+        import traceback
+        traceback.print_exc()
+        all_pass = False
+    try:
+        print(f"  [{test_v2_flow_light_mode()}] v2 轻量测试模式")
+    except Exception as e:
+        print(f"  [FAIL ✗] v2 轻量测试: {e}")
+        import traceback
+        traceback.print_exc()
+        all_pass = False
+    try:
+        print(f"  [{test_v2_flow_scroll_boundary_first_screen_all_collected()}] v2 下滑边界（第一屏全已采集）")
+    except Exception as e:
+        print(f"  [FAIL ✗] v2 下滑边界: {e}")
         import traceback
         traceback.print_exc()
         all_pass = False

@@ -1,0 +1,41 @@
+# 轻量测试子流程（--capture-mode test）：只验证「识别 → 点问号 → 进入计价页」
+# 暂不做工作日/休息日滚动采集；完整采集请用 detail_capture_gaode.yaml（默认）
+name: "detail_entry_test-高德-计价页入口测试"
+version: "1"
+description: "点问号 → 查看详细计价规则 → 截图 → 返回×2（测试模式）"
+
+steps:
+  - id: "q_{{.S.supplier}}"
+    type: "ground_click"
+    description: "点「{{.S.supplier}}」问号（测试进入计价页）"
+    optional: true
+    ref_image: "button_to_price.png"
+    ground:
+      element_desc: "找「{{.S.supplier}}」行「预估」前面的 '?' 问号。附件是参考图。返回 bbox 和中心坐标。"
+      retry_alt_descs:
+        - "「{{.S.supplier}}」行价格右侧的问号图标按钮"
+    wait_after: 1.2
+
+  - id: "detail_btn_{{.S.supplier}}"
+    type: "ground_click"
+    description: "点「查看详细计价规则」进入计价页（测试用）"
+    optional: true
+    ground:
+      element_desc: "高德打车计价弹窗。找「查看详细计价规则」或「计价规则」入口（弹窗中下部的文字链接/按钮）。返回 bbox 和中心坐标。"
+      retry_alt_descs:
+        - "计价弹窗中的「查看详细计价规则」文字链接"
+    wait_after: 1.5
+
+  - id: "detail_shot_{{.S.supplier}}"
+    type: "screenshot"
+    description: "截图计价页（验证已进入）"
+
+  - id: "exit_detail_{{.S.supplier}}"
+    type: "back"
+    description: "返回计价弹窗"
+    wait_after: 0.8
+
+  - id: "exit_popup_{{.S.supplier}}"
+    type: "back"
+    description: "返回打车页"
+    wait_after: 0.8

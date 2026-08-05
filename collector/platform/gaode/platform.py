@@ -24,6 +24,9 @@ def add_cli_args(parser: argparse.ArgumentParser) -> None:
                         help="目的地，例如 '北京西站' / '西北旺万象汇'")
     parser.add_argument("--pickup",
                         help="上车点 (v2/v3 需要，例如 '北京西站')")
+    parser.add_argument("--capture-mode", default="full", choices=["full", "test"],
+                        help="计价采集模式: full=完整 detail_capture（工作日/休息日滚动，默认）; "
+                             "test=轻量测试（仅点问号进入计价页，不做滚动）")
 
 
 # ---------------------------------------------------------------------------
@@ -34,6 +37,10 @@ def build_flow_vars(args: argparse.Namespace, flow_name: str) -> dict[str, str]:
     vars_: dict[str, str] = {"Address": args.address}
     if flow_name in ("v2", "v3"):   # 需要上车点
         vars_["Pickup"] = args.pickup or "我的位置"
+    # 计价采集子流程：full=detail_capture / test=detail_entry_test
+    vars_["DetailSubflow"] = ("detail_capture_gaode.yaml"
+                              if getattr(args, "capture_mode", "full") == "full"
+                              else "detail_entry_test_gaode.yaml")
     return vars_
 
 
