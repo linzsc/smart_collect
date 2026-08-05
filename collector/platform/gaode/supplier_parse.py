@@ -10,18 +10,27 @@ from __future__ import annotations
 import json
 import re
 
-# 不需要采集的运力商（CAP-08/09）：出租车/特快车/特惠快车/快车/拼车/的士/出租/优享类
-_SKIP_SUPPLIERS = {"出租车", "特快车", "优享"}          # 精确匹配
-_SKIP_KEYWORDS = ("快车", "拼车", "特快", "的士", "出租", "优享")   # 关键词子串
+# 不需要采集（CAP-08/09/11）：
+#   _SKIP_EXACT  精确匹配：栏目标题 + 平台产品行（特惠快车/快车/拼车/出租车等）
+#   _SKIP_KEYWORDS 子串：出租车类运力商（北京的士/北京新出租）+ UI 文案
+_SKIP_EXACT = {"拼车", "特价拼车", "极速拼车", "特惠快车", "快车", "特快车",
+               "出租车", "经济型", "优享", "优享型", "专车", "六座", "豪华"}
+_SKIP_KEYWORDS = ("的士", "出租", "打表", "发票", "查看更多", "全选")
+_SKIP_SUPPLIERS = _SKIP_EXACT  # 兼容别名
+
+
+def _is_skipped(name: str) -> bool:
+    """是否应排除：精确命中平台产品/栏目标题，或名称含出租车/UI 等关键词。"""
+    return name in _SKIP_EXACT or any(kw in name for kw in _SKIP_KEYWORDS)
 
 
 def parse_suppliers_response(raw: str) -> tuple[list[str], bool]:
-    """解析 S2 VLM 响应 → (suppliers, economy_ended)（CAP-09）。
+    """解析 S2 VLM 响应 → (suppliers, economy_ended)（CAP-09/11）。
 
     兼容两种格式：
       {"suppliers": [...], "economy_ended": true/false}   # 新格式
       ["快车", ...]                                       # 旧数组格式（economy_ended=False）
-    按 _SKIP_KEYWORDS 过滤；解析失败返回 ([], False)。
+    按 _is_skipped（_SKIP_EXACT 精确 + _SKIP_KEYWORDS 子串）过滤；解析失败返回 ([], False)。
     """
     suppliers: list[str] = []
     economy_ended = False
@@ -41,13 +50,13 @@ def parse_suppliers_response(raw: str) -> tuple[list[str], bool]:
                 return [], economy_ended
             for n in items:
                 n = str(n).strip()
-                if n and not any(kw in n for kw in _SKIP_KEYWORDS) and n not in suppliers:
+                if n and not _is_skipped(n) and n not in suppliers:
                     suppliers.append(n)
             return suppliers, economy_ended
         if isinstance(parsed, list):
             for n in parsed:
                 n = str(n).strip()
-                if n and not any(kw in n for kw in _SKIP_KEYWORDS) and n not in suppliers:
+                if n and not _is_skipped(n) and n not in suppliers:
                     suppliers.append(n)
             return suppliers, False
     except (json.JSONDecodeError, ValueError):
@@ -55,9 +64,9 @@ def parse_suppliers_response(raw: str) -> tuple[list[str], bool]:
 
     # 非 JSON：逐行兜底
     for line in cleaned.split("\n"):
-        line = re.sub(r'^[\d\.\、\)）\-\s]+', '', line.strip())
+        line = re.sub(r'^[\d\.\、\）\-\s]+', '', line.strip())
         line = line.strip().strip('"').strip("'").strip(",")
-        if line and len(line) <= 30 and not any(kw in line for kw in _SKIP_KEYWORDS):
+        if line and len(line) <= 30 and not _is_skipped(line):
             if len(line) >= 2 and line not in suppliers:
                 suppliers.append(line)
     return suppliers, False

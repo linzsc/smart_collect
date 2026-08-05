@@ -283,8 +283,8 @@ def test_pricing_loop_done_termination():
 # Suite 1c: S2 下滑确认（ARCH-21）
 # ======================================================================
 
-def test_s2_handler_scroll_confirm():
-    """s2_list_suppliers：空列表自动下滑（≤1/4屏）并重新识别；特殊词时确认 1 次后停。"""
+def test_s2_handler_identify_no_scroll():
+    """s2_list_suppliers（CAP-11）：只识别不内部下滑（下滑由 s4_scroll 步骤负责）；写 state。"""
     from unittest.mock import PropertyMock as _PM
 
     from collector.domain.vision import VisualQueryResult
@@ -293,36 +293,31 @@ def test_s2_handler_scroll_confirm():
     def _mk(query_responses):
         engine = MagicMock()
         type(engine).debug_mode = _PM(return_value=False)
-        type(engine)._screen_size = _PM(return_value=(1080, 2400))
         engine.state = {}
         engine.stats = {"vlm_calls": 0, "vlm_failures": 0}
         engine._log = lambda *a, **k: None
-        engine._wait = lambda *a, **k: None
+        engine._screenshot = lambda *a, **k: "/fake/s2.jpg"
         engine.ctx.vision.query_text.side_effect = [
             VisualQueryResult(raw_response=r) for r in query_responses
         ]
         return engine
 
-    # 场景1：空 + 未出现特殊词 → 下滑后找到新供应商
-    e1 = _mk([
-        '{"suppliers": [], "economy_ended": false}',
-        '{"suppliers": ["曹操出行"], "economy_ended": false}',
-    ])
+    # 场景1：有未采集供应商 → 不滑动，写 state
+    e1 = _mk(['{"suppliers": ["曹操出行", "阳光出行"], "economy_ended": false}'])
     handle_s2_list_suppliers(e1, {"id": "s2"})
-    assert e1.adb.slide.call_count == 1, e1.adb.slide.call_count
-    assert e1.state["suppliers"] == ["曹操出行"], e1.state
-    assert e1.state["scroll_count"] == 1
+    assert e1.adb.slide.call_count == 0, "S2 不应内部下滑（由 s4_scroll 负责）"
+    assert e1.state["suppliers"] == ["曹操出行", "阳光出行"], e1.state
+    assert e1.state["round_had_suppliers"] is True
+    assert e1.state["economy_ended"] is False
 
-    # 场景2：已出现特殊词 + 空 → 下滑 1 次确认后停（不反复滑）
-    e2 = _mk([
-        '{"suppliers": [], "economy_ended": true}',
-        '{"suppliers": [], "economy_ended": true}',
-    ])
+    # 场景2：已采集过的被过滤 → new 为空，economy_ended 透传
+    e2 = _mk(['{"suppliers": ["曹操出行"], "economy_ended": true}'])
+    e2.state["_processed"] = {"曹操出行"}
     handle_s2_list_suppliers(e2, {"id": "s2"})
-    assert e2.adb.slide.call_count == 1, e2.adb.slide.call_count
     assert e2.state["suppliers"] == []
+    assert e2.state["round_had_suppliers"] is False
     assert e2.state["economy_ended"] is True
-    assert e2.state["scroll_count"] == 1
+    assert e2.adb.slide.call_count == 0
     return "PASS ✓"
 
 
@@ -348,6 +343,8 @@ def test_v2_flow_end_to_end():
         d = str(element_desc)
         if "查看详细计价规则" in d:
             return _hit(540, 1800)
+        if "经济" in d and "导航" in d:   # jump_economy：左侧导航「经济」
+            return _hit(180, 400)
         if "问号" in d or "'?'" in d:
             return _hit(800, 1200)
         if "工作日" in d or "休息日" in d:
@@ -782,7 +779,7 @@ def main() -> None:
     suite1 = [
         ("S2 JSON 数组解析",          test_s2_parse_json_array),
         ("循环终止条件(满10/经济型采完)", test_pricing_loop_done_termination),
-        ("S2 空列表下滑确认", test_s2_handler_scroll_confirm),
+        ("S2 识别不内部下滑", test_s2_handler_identify_no_scroll),
         ("S2 排除出租车/优享",         test_s2_parse_excludes_taxi_and_youxiang),
         ("S2 逐行回退解析",            test_s2_parse_line_by_line_fallback),
         ("S2 空数组",                 test_s2_parse_empty),

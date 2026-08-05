@@ -17,14 +17,32 @@ from __future__ import annotations
 
 from collector.platform.gaode.supplier_parse import parse_suppliers_response
 
-# S2 提示词（CAP-09）
+# S2 提示词（CAP-11，单屏行级判断，不依赖「栏」跨屏概念）
 _S2_PROMPT = (
-    "高德打车页面用灰色分割线划分多个栏（如「经济型」「特快车/特惠快车」「出租车」「优享型」等）。"
-    "只列出「经济型」栏内（两道灰线之间）的运力商行，每行含车型名、预估价格和 ? 问号。"
-    "不要列出其他栏（特快车/特惠快车、快车、拼车、出租车、优享型）的行。"
-    '以 JSON 返回: {"suppliers": ["曹操出行", ...], "economy_ended": false}'
-    "economy_ended: 截图中出现「特快车/特惠快车」「出租车」「优享型」等非经济型栏"
-    "（即经济型栏已结束）时为 true，否则 false。"
+    "这是高德打车「选择车型」页面的单屏截图。完成两件事：\n"
+    "\n"
+    "【任务1：列出普通运力商】\n"
+    "运力商行特征：左侧圆形品牌 logo + 名称 + 灰色小字标签（如「敢坐敢赔」「隐私保护」），"
+    "右侧「预估xx元」+ 方形勾选框。\n"
+    "例如：火箭出行、旗妙出行、星徽出行、飞嘀打车、首汽约车、阳光出行、AA出行"
+    "（不限于这些，符合特征的都算）。\n"
+    "\n"
+    "以下三类一律排除：\n"
+    "1. 出租车类：名称含「的士」或「出租」（如「北京的士」「北京新出租」）；"
+    "或标签带「打表计价」「纸质发票」「官方出品」；或 logo 是黄色 TAXI 样式；\n"
+    "2. 平台产品行：名称为「特价拼车」「极速拼车」「特惠快车」「快车」「特快车」「出租车」"
+    "（常带 0/5、1/8 这类角标），是平台产品不是运力商；\n"
+    "3. 界面元素：「经济型·14」「全选经济」「查看更多已选车型」悬浮按钮、底部按钮栏。\n"
+    "\n"
+    "【任务2：判断是否采完】\n"
+    "本屏是否出现以下栏目标题之一：「特快车」「出租车」「优享型」「专车」「六座」「豪华」？\n"
+    "栏目标题特征：大号加粗黑字、独立成行、左侧没有圆形 logo、右侧没有预估价"
+    "（可能带「全选优享」字样）。\n"
+    "出现任意一个 → economy_ended = true，且任务1只统计位于该标题【上方】的运力商行，"
+    "标题及以下的内容全部忽略；\n"
+    "未出现 → economy_ended = false。\n"
+    "\n"
+    '只输出 JSON：{"suppliers": ["名称1", "名称2"], "economy_ended": false}'
 )
 
 
@@ -39,52 +57,31 @@ def _identify(engine, step: dict) -> tuple[list[str], bool]:
 
 
 def handle_s2_list_suppliers(engine, step: dict) -> None:
-    """extract_list handler：识别当前屏经济型供应商并写入 engine.state。
+    """extract_list handler：识别当前屏经济型供应商并写入 engine.state（CAP-11）。
 
-    空列表（当前屏无未采集）时自动下滑（≤1/4 屏）并重新识别，累计不超过
-    _MAX_SCROLLS 次：
-      - 未出现特殊词：下滑找更多（最多 3 次）；
-      - 已出现特殊词：再下滑 1 次确认下方没有更多经济型供应商后停止。
-    保证终止判定（pricing_loop_done）看到的永远是「下滑后」的识别结果。
-    只返回未采集过的运力商；不在此标记已处理（由 mark_supplier_processed
-    采集完成后标记，避免漏采）。
+    - 只做「截图 → VLM 识别 → 过滤 → 日志 → 写 state」；
+    - 下滑由 YAML 循环步骤 s4_scroll 负责（本轮无新供应商时触发，≤1/3 屏）；
+    - 不在此标记已处理（由 mark_supplier_processed 采集完成后标记，避免漏采）。
+    日志覆盖三块：屏上实际有哪些（VLM 原始行）/ 识别到了哪些（过滤后）/ 还有哪些未采集。
     """
     processed = engine.state.setdefault("_processed", set())
-    suppliers, economy_ended = _identify(engine, step)
-    new_suppliers = [s for s in suppliers if s not in processed]
-    if new_suppliers:
-        engine.state["s2_confirmed_ended"] = False
+    suppliers, economy_ended = _identify(engine, step)   # suppliers 已按 _SKIP_KEYWORDS 过滤
 
-    scroll_count = int(engine.state.get("scroll_count", 0))
-    confirmed_ended = bool(engine.state.get("s2_confirmed_ended"))
-    step_id = step.get("id", "s2_suppliers")
-    while (not new_suppliers) and scroll_count < _MAX_SCROLLS             and not (economy_ended and confirmed_ended):
-        if engine.debug_mode:
-            engine._screenshot(f"{step_id}_scroll_before")
-        sw, sh = engine._screen_size
-        engine.adb.slide(sw // 2, int(0.5 * sh), sw // 2, int(0.25 * sh), 600)  # ≤1/4 屏
-        engine._wait(1.0, "s2_scroll")
-        if engine.debug_mode:
-            engine._screenshot(f"{step_id}_scroll_after")
-        scroll_count += 1
-        engine.state["scroll_count"] = scroll_count
-        if economy_ended:
-            engine.state["s2_confirmed_ended"] = True
-            confirmed_ended = True
-        engine._log(f"  [S2] 空列表，下滑 {scroll_count}/{_MAX_SCROLLS} 次后重新识别")
-        suppliers, economy_ended = _identify(engine, step)
-        new_suppliers = [s for s in suppliers if s not in processed]
-        if new_suppliers:
-            engine.state["s2_confirmed_ended"] = False
-            confirmed_ended = False
+    new_suppliers = [s for s in suppliers if s not in processed]
+    already = [s for s in suppliers if s in processed]
+
+    # 日志：屏上有哪些（过滤后）/ 已采过 / 本轮新（未采集）
+    engine._log(f"  [S2] 屏上识别到(已过滤): {len(suppliers)} 个 -> {suppliers}")
+    if already:
+        engine._log(f"  [S2] 已采集过(跳过): {already}")
+    engine._log(f"  [S2] 本轮新运力商(未采集): {new_suppliers}")
+    engine._log(f"  [S2] 已采集 {len(processed)} 个: {sorted(processed)}")
+    if economy_ended:
+        engine._log(f"  [S2] 经济型已结束(出现特快车/出租车/优享型等标题)，本轮新 {len(new_suppliers)} 个")
 
     engine.state["suppliers"] = new_suppliers
     engine.state["round_had_suppliers"] = bool(new_suppliers)
     engine.state["economy_ended"] = economy_ended
-    if economy_ended:
-        engine._log(f"  [S2] 经济型栏已结束，本轮新运力商 {len(new_suppliers)} 个")
-    else:
-        engine._log(f"  [S2] 本轮新运力商 {len(new_suppliers)} 个")
 
 
 def handle_mark_supplier_processed(engine, step: dict) -> None:
@@ -103,13 +100,11 @@ _MAX_SCROLLS = 3
 
 
 def handle_pricing_loop_done(engine, step: dict) -> bool:
-    """loop_until 终止条件：
+    """loop_until 终止条件（CAP-11）：
         1. 已采集满 max_suppliers（默认 10）；或
-        2. 出现「出租车/特快车/优享型」（经济型栏结束）且其上的经济型供应商全部采完
-           （不满 10 个也算完成）；或
+        2. 屏内出现栏目标题（特快车/出租车/优享型/专车/六座/豪华，economy_ended=true）
+           且该标题上方的经济型运力商全部采完（不满 10 个也算完成）；或
         3. 兜底：下滑累计达 _MAX_SCROLLS（3 次）且当前屏仍无未采集供应商。
-
-    出现特殊词后不再下滑（s4_next 同时要求 economy_ended=false）。
     """
     st = engine.state
     target = int(engine.profile_cfg.get("collection", {}).get("max_suppliers", 10))

@@ -191,6 +191,7 @@ collector/
 | CAP-04 | Probe/Keyframe与Manifest | `TODO` | 最少关键帧覆盖完整内容，产物可追踪 |
 | CAP-05 | 详情页退出条件：预约用车或页面无变化 | `DONE` | 出现“预约用车”**或**页面不再变化即停止滚动（本地像素比对）；离线测试通过 |
 | CAP-06 | 经济型运力商批量采集（目标10/采完即停） | `DONE` | 达到 max_suppliers=10 或「全选经济」下识别到的运力商采完即结束；列表最后一个采完且不够时下滑打车页查看新运力商；找不到问号跳过 |
+| ARCH-22 | S2 单屏行级识别 + 每轮点导航锚定 + 无新才滑（CAP-11） | `DONE` | 新提示词按行级特征+标题上方截断；每轮 全选校验→点左侧导航「经济」→识别→采集→无新才小幅下滑；过滤层 _SKIP_EXACT+_SKIP_KEYWORDS 双保险；S2 日志含 屏上/识别到/未采集 |
 | OCR-01 | 接入滴滴内部 OCR：v2 详细计价页「预约用车」检测（OCR 优先，VLM 兜底） | `DONE` | ocr_client（自包含）+ OcrTextExtractor 实现 TextExtractor；scroll_until_visible 支持 ocr_first；CLI --no-ocr 开关；OCR_PROFILE=DEV 切环境；离线测试通过 |
 | CAP-10 | 截图优化：滚动/check 合并 + collect 只落 result 帧 | `DONE` | 详情页每轮 1 张滚动帧（无 scroll/check 重复）；result 数量随下滑次数；collect 探针不落盘 |
 | CAP-09 | 经济型栏边界感知：S2 只识别经济型栏 + 特快车/出租车/优享型以下不再采集 | `DONE` | S2 返回 (suppliers, economy_ended)；栏结束（出现特快车/出租车/优享型）即使不足 10 也停止；快车/拼车入关键词兜底 |
@@ -277,6 +278,7 @@ python -m compileall collector tests
 | 2026-08-04 | RES-01 | `DONE` | 新增 screenshot_organizer：必要截图=打车页(select_all_after)+每(标签×运力商)scroll_0..3；聚合 result/工作日|休息日/{冒泡页,<运力商>}/，打车页入冒泡页（每大文件夹1次共2次）；handle_pricing_collect 结束后调用；output 缺失/为空安全跳过；result/ 加入 .gitignore | test_pricing_collect（含 RES-01 聚合测试）通过；真实 output/ 验证 18 张/冒泡页×2+4组结构正确 |
 | 2026-08-04 | PERF-03 | `DONE` | 标签坐标复用（_tab_coords 缓存，首次 LLM 记录后续直接点击）+ 详情页等待再收敛（tab_wait 0.5/detail_scroll_wait 0.3/scroll_top_wait 0.1/back_wait 0.8） | test_pricing_collect（PERF-03 标签复用测试 + 全流程断言标签 ground=2）通过 |
 | 2026-08-04 | PERF-02 | `DONE` | 返回导航确定性化（adb.back() 替代 VLM ground）+ 确定性等待收敛（back_wait 1.0/tab_wait 0.8/pricing_page_wait 1.2/after_confirm_wait 1.5）；新建 耗时优化方案-2026-08.md | test_pricing_collect（含 PERF-02 返回确定性化测试 + 全流程回归）通过 |
+| 2026-08-05 | ARCH-22 | `DONE` | S2 单屏行级识别（新提示词）+ 每轮点左侧导航「经济」锚定 + 无新才小幅下滑；handle_s2_list_suppliers 移除内部下滑；supplier_parse 双保险过滤；S2 日志三层可见 | test_pricing_collect + 全量 7 测试文件通过 |
 | 2026-08-04 | OCR-01 | `DONE` | 接入滴滴内部 OCR：infrastructure/vision/ocr_client.py + ocr_adapter.py（实现 TextExtractor）；_do_scroll_until_visible 支持 ocr_first（命中→不调 VLM，未命中/异常→VLM 兜底）；detail_capture_gaode.yaml 开启；ExecutionContext 挂载 + ocr_calls 统计；CLI --no-ocr | tests/test_ocr_client.py 全部通过 |
 | 2026-08-04 | PERF-01 | `TODO` | 耗时优化 P2：debug 模式非准确耗时；API/等待/设备+编码三块归因，待优化 | 250.4s 真机日志归因 |
 

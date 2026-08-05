@@ -552,6 +552,54 @@ steps:
 # Suite 11: debug 模式每步截图
 # ======================================================================
 
+
+def test_debug_annotations_cover_all_screenshots():
+    """debug 模式：每个动作（含滑动）都有标注，标注数 ≥ 截图数（可溯源动作）。"""
+    import tempfile as _tf
+
+    yaml_text = """
+name: t
+steps:
+  - id: "click1"
+    type: "ground_click"
+    description: "x"
+    ground:
+      element_desc: "x"
+  - id: "scroll1"
+    type: "scroll"
+    direction: "down"
+    repeat: 1
+    duration_ms: 0
+  - id: "scroll2"
+    type: "scroll_until_visible"
+    target_text: "标记"
+    max_swipes: 2
+    wait_after_slide: 0.01
+"""
+    with _tf.TemporaryDirectory() as tmp:
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_text)
+            tmp_flow = f.name
+        try:
+            mock_grounder = MagicMock()
+            mock_grounder.api_seconds = 0.0
+            mock_grounder.ground.return_value = {
+                "element": "x", "bbox": [100, 100, 200, 200], "center": [150, 150],
+                "found": True, "selected": None, "conf": 0.9, "raw_response": "",
+            }
+            mock_grounder.query_text.return_value = {"raw_response": "NO", "success": True}
+            e = FlowEngine(adb=_MockAdbFixed(), grounder=mock_grounder, flow_path=tmp_flow,
+                           output_dir=str(Path(tmp) / "out"), verbose=False, mode="debug")
+            with patch("time.sleep"):
+                e.run()
+            shots = list((Path(tmp) / "out" / "screenshots").glob("*.jpg"))
+            annos = list((Path(tmp) / "out" / "annotations").glob("*.png"))
+            assert len(annos) >= len(shots), \
+                f"标注 {len(annos)} 应 ≥ 截图 {len(shots)}（每个动作都要可溯源）"
+        finally:
+            Path(tmp_flow).unlink(missing_ok=True)
+    return "PASS ✓"
+
 def test_scroll_debug_captures_before_after():
     """debug 模式：scroll 步骤滑动前后各截图（如 S0 上滑可追溯）；collect 模式不截图。"""
     import tempfile as _tf
@@ -823,6 +871,7 @@ def main() -> None:
         ("Suite 11: debug 每步截图", [
             ("scroll 前后截图（debug）/collect 不截", test_scroll_debug_captures_before_after),
             ("back 返回前截图", test_back_debug_captures_before),
+            ("标注覆盖全部截图", test_debug_annotations_cover_all_screenshots),
         ]),
         ("Suite 12: scroll 条件执行", [
             ("if_state 跳过/执行/特殊词不滑", test_scroll_if_state_conditional),

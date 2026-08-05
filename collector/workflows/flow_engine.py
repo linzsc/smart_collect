@@ -27,6 +27,7 @@ Features:
 from __future__ import annotations
 
 import json
+import math
 import re
 import time
 from pathlib import Path
@@ -383,6 +384,8 @@ class FlowEngine:
         for i in range(max_swipes):
             stem = f"{step_id}_scroll_{i}" + (f"_{suffix}" if suffix else "")
             shot = self._screenshot(stem)
+            if self.debug_mode:
+                self._annotate_swipe(shot, Path(shot).stem, sw // 2, y1, sw // 2, y2, Path(shot).stem)
 
             # OCR 优先：本地 OCR 检测目标文字（如「预约用车」），未命中/异常再走 VLM 兜底
             found = False
@@ -528,24 +531,29 @@ class FlowEngine:
         if self.debug_mode:
             self._screenshot(f"{step_id}_before")   # 滑动前
 
+        last_gesture: tuple[int, int, int, int] | None = None
         for i in range(repeat):
             if direction == "up":
-                self.adb.slide(sw // 2, _y(sh // 2), sw // 2,
-                               int(float(ty) * sh) if ty is not None else sh // 4, duration)
+                x1, y1 = sw // 2, _y(sh // 2)
+                x2, y2 = sw // 2, (int(float(ty) * sh) if ty is not None else sh // 4)
             elif direction == "down":
-                self.adb.slide(sw // 2, _y(sh // 3), sw // 2,
-                               int(float(ty) * sh) if ty is not None else sh * 2 // 3, duration)
+                x1, y1 = sw // 2, _y(sh // 3)
+                x2, y2 = sw // 2, (int(float(ty) * sh) if ty is not None else sh * 2 // 3)
             elif direction == "half_down":
-                self.adb.slide(sw // 2, _y(sh * 2 // 3), sw // 2,
-                               int(float(ty) * sh) if ty is not None else sh * 2 // 3 - sh // 2,
-                               duration)
-
+                x1, y1 = sw // 2, _y(sh * 2 // 3)
+                x2, y2 = sw // 2, (int(float(ty) * sh) if ty is not None else sh * 2 // 3 - sh // 2)
+            else:
+                x1 = y1 = x2 = y2 = 0
+            self.adb.slide(x1, y1, x2, y2, duration)
+            last_gesture = (x1, y1, x2, y2)
             self._wait(step.get("after_wait", 1.0), "after_scroll")
 
         if counter_key:
             self.state[counter_key] = self.state.get(counter_key, 0) + 1
         if self.debug_mode:
-            self._screenshot(f"{step_id}_after")    # 滑动后（查看滚动效果）
+            after = self._screenshot(f"{step_id}_after")    # 滑动后（查看滚动效果）
+            if last_gesture:
+                self._annotate_swipe(after, Path(after).stem, *last_gesture, Path(after).stem)
         self._log(f"  ↕ 滑动: {direction} ×{repeat}")
 
     def _do_wait(self, step: dict) -> None:
@@ -904,6 +912,10 @@ class FlowEngine:
         path = self.ctx.capture(f"{self._shot_seq:02d}_{self._render(name)}", save=save)
         if path is None:
             raise StepFailed(f"截图失败: {name}")
+        # debug：每张截图都生成对应标注（帧名标签），保证标注与裸截图一致、可溯源动作
+        if self.debug_mode:
+            stem = Path(path).stem
+            self.ctx.annotate(path, stem, lambda d, s=stem: d.text((12, 12), s, fill="red"))
         return path
 
     def _annotate(self, image_path, step, bbox, cx, cy, attempt=0):
@@ -918,6 +930,29 @@ class FlowEngine:
             draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=self._ANNO_DOT, width=4)
             draw.line((cx - r - 10, cy, cx + r + 10, cy), fill=self._ANNO_DOT, width=3)
             draw.line((cx, cy - r - 10, cx, cy + r + 10), fill=self._ANNO_DOT, width=3)
+
+        self.ctx.annotate(image_path, tag, _draw)
+
+    def _annotate_swipe(self, image_path: str, tag: str,
+                        x1: int, y1: int, x2: int, y2: int,
+                        label: str | None = None) -> None:
+        """debug：绘制滑动箭头（含帧名标签），用于溯源滑动动作。"""
+        if not self.debug_mode:
+            return
+        color = self._ANNO_BBOX
+        arrow_size = 18
+
+        def _draw(draw):
+            draw.line((x1, y1, x2, y2), fill=color, width=5)
+            angle = math.atan2(y2 - y1, x2 - x1)
+            ax1 = x2 - arrow_size * math.cos(angle - math.pi / 6)
+            ay1 = y2 - arrow_size * math.sin(angle - math.pi / 6)
+            ax2 = x2 - arrow_size * math.cos(angle + math.pi / 6)
+            ay2 = y2 - arrow_size * math.sin(angle + math.pi / 6)
+            draw.polygon([(x2, y2), (ax1, ay1), (ax2, ay2)], fill=color)
+            draw.ellipse((x1 - 6, y1 - 6, x1 + 6, y1 + 6), fill=color)
+            if label:
+                draw.text((12, 12), label, fill="red")
 
         self.ctx.annotate(image_path, tag, _draw)
 
