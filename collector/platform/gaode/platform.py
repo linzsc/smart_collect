@@ -65,9 +65,10 @@ def _organize_result_screenshots(engine) -> None:
         )
         groups = summary.get("groups", {})
         engine._log(f"── 结果整理: {summary.get('copied', 0)} 张 → {result_dir}")
-        for tab in ("工作日", "休息日"):
-            for supp, files in groups.get(tab, {}).items():
-                engine._log(f"    {tab}/{supp}: 滚动截图 {len(files)} 张 + 打车页")
+        for tab, supps in groups.items():
+            for supp, files in supps.items():
+                label = "滚动截图" if tab in ("工作日", "休息日") else "详细计价页"
+                engine._log(f"    {tab}/{supp}: {label} {len(files)} 张")
     except Exception as e:
         engine._log(f"  ⚠ 结果整理失败: {e}")
 

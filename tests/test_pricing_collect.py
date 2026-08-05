@@ -232,6 +232,48 @@ def test_screenshot_organizer():
     return "PASS ✓"
 
 
+def test_screenshot_organizer_ride_fallback_and_light_mode():
+    """RES-01 修复：全选已勾选（无 select_all_after）时，用 verify_select_all_before 作打车页证据
+    （取最早一张）；找不到打车页不再整体跳过；轻量模式 detail_shot 归入「计价页/<运力商>/」。"""
+    import tempfile
+
+    from collector.platform.gaode.screenshot_organizer import collect_necessary_screenshots
+
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "output"
+        res = Path(tmp) / "result"
+        shots = out / "screenshots"
+        shots.mkdir(parents=True)
+
+        # 无 select_all_after（全选已勾选跳过点击），只有每轮校验的 verify_select_all_before（多张）
+        (shots / "12_verify_select_all_before.jpg").write_bytes(b"r1")
+        (shots / "84_verify_select_all_before.jpg").write_bytes(b"r2")
+        # 全量模式滚动帧
+        (shots / "45_工作日_scroll_0_曹操出行.jpg").write_bytes(b"s")
+        (shots / "46_工作日_scroll_1_曹操出行.jpg").write_bytes(b"s")
+        (shots / "61_休息日_scroll_0_火箭出行.jpg").write_bytes(b"s")
+        # 轻量模式详细计价页证据
+        (shots / "70_detail_shot_曹操出行.jpg").write_bytes(b"d")
+
+        summary = collect_necessary_screenshots(out, res)
+
+        # 1) 打车页取最早一张 verify_select_all_before（不是全部）
+        assert summary["ride_pages"] == ["12_verify_select_all_before.jpg"], summary["ride_pages"]
+        bubble = res / "工作日" / "冒泡页"
+        assert (bubble / "12_verify_select_all_before.jpg").exists()
+        assert not (bubble / "84_verify_select_all_before.jpg").exists(), "只应复制最早一张打车页"
+        # 2) 全量滚动帧照常聚合
+        assert (res / "工作日" / "曹操出行" / "45_工作日_scroll_0_曹操出行.jpg").exists()
+        assert (res / "工作日" / "曹操出行" / "46_工作日_scroll_1_曹操出行.jpg").exists()
+        assert (res / "休息日" / "火箭出行" / "61_休息日_scroll_0_火箭出行.jpg").exists()
+        # 3) 轻量模式 detail_shot 归入 计价页/<运力商>/
+        assert (res / "计价页" / "曹操出行" / "70_detail_shot_曹操出行.jpg").exists(),             sorted(str(x) for x in res.rglob("*"))
+        assert summary["groups"].get("计价页", {}).get("曹操出行") == ["70_detail_shot_曹操出行.jpg"]
+        # 打车页(工作日/休息日各1=2) + 工作日曹操2 + 休息日火箭1 + 计价页曹操1 = 6
+        assert summary["copied"] == 6, f"copied={summary['copied']}"
+    return "PASS ✓"
+
+
 # ======================================================================
 # Suite 1b: 循环终止条件（ARCH-17）
 # ======================================================================
@@ -957,6 +999,7 @@ def main() -> None:
         ("GroundingResult only center", test_extract_center_only_center),
         ("GroundingResult 全零归一化", test_extract_center_none),
         ("RES-01 结果整理聚合",      test_screenshot_organizer),
+        ("RES-01 打车页兜底+轻量计价页", test_screenshot_organizer_ride_fallback_and_light_mode),
     ]
     for label, fn in suite1:
         try:
