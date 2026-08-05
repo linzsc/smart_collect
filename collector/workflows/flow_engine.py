@@ -448,7 +448,8 @@ class FlowEngine:
         prev = None
         for i in range(max_swipes):
             stem = f"{step_id}_scroll_{i}" + (f"_{suffix}" if suffix else "")
-            shot = self._screenshot(stem)
+            # save=True：滚动帧是 collect 模式要采集的详细计价页内容，必须落盘 output/screenshots
+            shot = self._screenshot(stem, save=True)
             if self.debug_mode:
                 self._annotate_swipe(shot, Path(shot).stem, sw // 2, y1, sw // 2, y2, Path(shot).stem)
 
@@ -481,7 +482,7 @@ class FlowEngine:
 
             if found:
                 found_stem = f"{step_id}_found" + (f"_{suffix}" if suffix else "")
-                self._screenshot(found_stem)
+                self._screenshot(found_stem, save=True)
                 self._log(f"  ✓ 找到「{target}」，停止")
                 self._scroll_back_to_top_if_needed(step, sw, sh)
                 return
@@ -631,7 +632,8 @@ class FlowEngine:
         self._wait(secs, "step_wait")
 
     def _do_screenshot(self, step: dict) -> None:
-        self._screenshot(step.get("id", "shot"))
+        # save 可配：true 在 collect 模式也落盘（如轻量测试的 detail_shot 证据帧）
+        self._screenshot(step.get("id", "shot"), save=step.get("save"))
 
     # ------------------------------------------------------------------
     # 流程原语：back / extract_list / for_each / loop_until / subflow / verify

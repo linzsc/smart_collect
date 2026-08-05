@@ -28,6 +28,7 @@ steps:
   - id: "detail_shot_{{.S.supplier}}"
     type: "screenshot"
     description: "截图计价页（验证已进入）"
+    save: true
 
   - id: "exit_detail_{{.S.supplier}}"
     type: "back"

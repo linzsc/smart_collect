@@ -448,6 +448,45 @@ steps:
 # Suite 7: scroll_until_visible 增强
 # ======================================================================
 
+
+def test_scroll_until_visible_collect_saves_frames():
+    """collect 模式：scroll_until_visible 的滚动帧必须落盘（详细计价页是采集内容）。"""
+    import tempfile as _tf
+
+    yaml_text = """
+name: t
+steps:
+  - id: "scroll_工作日"
+    type: "scroll_until_visible"
+    target_text: "预约用车"
+    max_swipes: 3
+    frame_suffix: "{{.S.supplier}}"
+    stop_on_stable: true
+    stable_threshold: 0.01
+    wait_after_slide: 0
+"""
+    with _tf.TemporaryDirectory() as tmp:
+        adb = _MockAdbFixed()
+        grounder = MagicMock()
+        grounder.query_text.return_value = {"raw_response": "NO", "success": True}
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            f.write(yaml_text)
+            tmp_flow = f.name
+        try:
+            e = FlowEngine(adb=adb, grounder=grounder, flow_path=tmp_flow,
+                           output_dir=str(Path(tmp) / "out"), verbose=False, mode="collect")
+            e.state["supplier"] = "曹操出行"
+            with patch("time.sleep"):
+                e.run()
+            shots_dir = Path(tmp) / "out" / "screenshots"
+            shots = sorted(p.name for p in shots_dir.glob("*.jpg"))
+            # 页面无变化即停 → scroll_0 / scroll_1 都应落盘（collect 模式）
+            assert any("_工作日_scroll_0_曹操出行.jpg" in n for n in shots), shots
+            assert any("_工作日_scroll_1_曹操出行.jpg" in n for n in shots), shots
+        finally:
+            Path(tmp_flow).unlink(missing_ok=True)
+    return "PASS ✓"
+
 def test_scroll_until_visible_frame_suffix_and_stable():
     import tempfile as _tf
 
@@ -859,6 +898,7 @@ def main() -> None:
         ]),
         ("Suite 7: scroll_until_visible 增强", [
             ("frame_suffix + stop_on_stable", test_scroll_until_visible_frame_suffix_and_stable),
+            ("collect 滚动帧落盘", test_scroll_until_visible_collect_saves_frames),
             ("scroll_back_to_top", test_scroll_until_visible_back_to_top),
         ]),
         ("Suite 9: input_text 确认模式", [
