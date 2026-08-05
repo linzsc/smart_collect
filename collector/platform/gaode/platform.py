@@ -24,9 +24,10 @@ def add_cli_args(parser: argparse.ArgumentParser) -> None:
                         help="目的地，例如 '北京西站' / '西北旺万象汇'")
     parser.add_argument("--pickup",
                         help="上车点 (v2/v3 需要，例如 '北京西站')")
-    parser.add_argument("--capture-mode", default="full", choices=["full", "test"],
+    parser.add_argument("--capture-mode", default="full", choices=["full", "test", "ui"],
                         help="计价采集模式: full=完整 detail_capture（工作日/休息日滚动，默认）; "
-                             "test=轻量测试（仅点问号进入计价页，不做滚动）")
+                             "test=轻量测试（仅点问号进入计价页，不做滚动）; "
+                             "ui=UI树提取详细计价页（每运力商产出工作日/休息日 2 个 JSON）")
 
 
 # ---------------------------------------------------------------------------
@@ -37,10 +38,14 @@ def build_flow_vars(args: argparse.Namespace, flow_name: str) -> dict[str, str]:
     vars_: dict[str, str] = {"Address": args.address}
     if flow_name in ("v2", "v3"):   # 需要上车点
         vars_["Pickup"] = args.pickup or "我的位置"
-    # 计价采集子流程：full=detail_capture / test=detail_entry_test
-    vars_["DetailSubflow"] = ("detail_capture_gaode.yaml"
-                              if getattr(args, "capture_mode", "full") == "full"
-                              else "detail_entry_test_gaode.yaml")
+    # 计价采集子流程：full=detail_capture / test=detail_entry_test / ui=detail_capture_ui（UI树提取）
+    cm = getattr(args, "capture_mode", "full")
+    if cm == "test":
+        vars_["DetailSubflow"] = "detail_entry_test_gaode.yaml"
+    elif cm == "ui":
+        vars_["DetailSubflow"] = "detail_capture_ui_gaode.yaml"
+    else:
+        vars_["DetailSubflow"] = "detail_capture_gaode.yaml"
     return vars_
 
 
@@ -125,6 +130,79 @@ def _ensure_select_all_ui_tree(engine, label: str) -> bool:
         engine._log(f"  [全选] UI树异常({e})，回退 VLM")
         return False
 
+
+
+
+def handle_fare_detail_ui(engine, step: dict) -> None:
+    """fare_detail_ui：UI 树提取详细计价页（dump → 解析 → 下滑 → 拼接 → 写 JSON）。
+
+    - 只采「预约用车」之上的内容；没有预约用车则全部；
+    - 坐标坍塌组跳过（等滚动后重 dump 获得正确坐标）；
+    - 每滑一屏 dump 一次，按 (段, 时段) 去重拼接；
+    - 每个运力商每个标签产出一个 JSON：result/{tab}/{supplier}/fare_detail.json；
+    - UI 树不可用时留空并告警（OCR 截图链路作为兜底仍在）。
+    """
+    from collector.platform.gaode.fare_detail_parse import (
+        FareDetail,
+        merge_fare_detail,
+        parse_fare_detail_nodes,
+        write_fare_detail_json,
+    )
+    from collector.platform.gaode.ui_tree_supplier import nodes_from_xml
+
+    supplier = str(engine.state.get("supplier", "")).strip()
+    tab = str(engine.state.get("tab", "")).strip()
+    engine._log(f"── 计价UI提取: {supplier or '?'} / {tab or '?'} ──")
+
+    merged = FareDetail(supplier=supplier, tab=tab)
+    max_rounds = int(step.get("max_rounds", 12))
+    sw = engine._screen_size[0] if engine._screen_size else 1200
+    sh = engine._screen_size[1] if engine._screen_size else 2670
+    no_add_streak = 0
+    down_scrolls = 0
+
+    for rnd in range(max_rounds):
+        xml = engine.adb.dump_ui_tree()
+        if not xml or not isinstance(xml, str):
+            engine._log(f"  [计价UI] dump 失败(第{rnd+1}次)，停止（OCR 链路兜底）")
+            break
+        nodes = nodes_from_xml(xml)
+        fd = parse_fare_detail_nodes(nodes, supplier, tab)
+        added = merge_fare_detail(merged, fd)
+        engine._log(
+            f"  [计价UI] 第{rnd+1}轮 dump: 段{len(fd.sections)} "
+            f"坍塌跳过{fd.collapsed_skipped} 新增{added}行"
+        )
+        if fd.stopped_at_yuyue:
+            engine._log("  [计价UI] 已到「预约用车」，停止（只取其上）")
+            break
+        if added == 0:
+            no_add_streak += 1
+            if no_add_streak >= 2:
+                engine._log("  [计价UI] 连续 2 轮无新增，停止")
+                break
+        else:
+            no_add_streak = 0
+        # 下滑一屏再 dump（把 WebView 坍塌区滚入可见区，获得正确坐标）
+        engine.adb.slide(sw // 2, int(sh * 0.6), sw // 2, int(sh * 0.4), 500)
+        engine._wait(step.get("scroll_wait", 0.6), "fare_scroll")
+        down_scrolls += 1
+
+    # 回到顶部：仿原 scroll_until_visible 的 scroll_back_to_top（否则下一轮切 tab 时 tab 在屏外）
+    if down_scrolls:
+        up_swipes = min(8, max(3, (down_scrolls + 1) // 2 + 1))
+        engine._log(f"  [计价UI] 回滚到顶部（下滑 {down_scrolls} 次 → 上滑 {up_swipes} 次）")
+        for _ in range(up_swipes):
+            engine.adb.slide(sw // 2, int(sh * 0.25), sw // 2, int(sh * 0.75), 200)
+            engine._wait(0.2, "fare_scroll_top")
+
+    result_dir = str(Path(engine.output_dir).resolve().parent / "result")
+    write_fare_detail_json(merged, result_dir, logger=engine._log)
+    if merged.sections:
+        engine._log("  [计价UI] 段: " + ", ".join(
+            f"{s.title}({len(s.rows)})" for s in merged.sections))
+    else:
+        engine._log("  [计价UI] ⚠ 未提取到结构化内容（UI 树不可用，建议走 OCR 截图链路）")
 
 
 def handle_ui_tree_click(engine, step: dict) -> bool:
@@ -281,6 +359,7 @@ def build_platform() -> Platform:
         add_cli_args=add_cli_args,
         build_flow_vars=build_flow_vars,
         step_handlers={
+            "fare_detail_ui": handle_fare_detail_ui,
             "ui_tree_click": handle_ui_tree_click,
             "select_all": handle_select_all,
             "pricing_result_organize": handle_pricing_result_organize,

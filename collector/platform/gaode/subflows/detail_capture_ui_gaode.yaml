@@ -1,0 +1,68 @@
+# 详细计价规则采集子流程（UI 树提取版，--capture-mode ui）
+# 供 pricing_collect_gaode.yaml 的 for_each 通过 subflow 引用，与主流程共享 ctx/stats/截图编号。
+# 与原 detail_capture_gaode.yaml 的差异：滚动采集换成了 fare_detail_ui（UI 树 dump→解析→下滑→拼接），
+# 每个运力商每个标签产出一个 result/{tab}/{supplier}/fare_detail.json。
+# 依赖运行时状态模板：{{.S.supplier}}（当前运力商）、{{.S.tab}}（工作日/休息日）。
+name: "detail_capture_ui-高德-详细计价规则采集（UI树提取）"
+version: "1"
+description: "S3a 点问号 → S3c 查看详细计价规则 → 每标签 UI 树 dump+下滑+拼接 → 产出 JSON → 返回×2"
+
+steps:
+  # ── S3a: 点「{{.S.supplier}}」问号（UI 树优先，回退 VLM；找不到则跳过）──
+  - id: "q_{{.S.supplier}}"
+    type: "ui_tree_click"
+    description: "点「{{.S.supplier}}」问号（UI 树优先，回退 VLM）"
+    optional: true
+    ui_target: "q_button"
+    ref_image: "button_to_price.png"
+    wait_after: 1.2
+    fallback_ground:
+      element_desc: "找「{{.S.supplier}}」行「预估」前面的 '?' 问号。附件是参考图。返回 bbox 和中心坐标。"
+      retry_alt_descs:
+        - "「{{.S.supplier}}」行价格右侧的问号图标按钮"
+
+  - id: "popup_wait"
+    type: "wait"
+    description: "等待计价弹窗稳定"
+    seconds: 1.2
+
+  # ── S3c: OCR 识别「查看详细计价规则」并点击（进页导航，零 LLM）──
+  - id: "detail_btn"
+    type: "ocr_click"
+    description: "OCR 识别「查看计价规则」并点击"
+    optional: true
+    text: "查看计价规则"
+    max_retries: 2
+    retry_wait: 1.0
+    wait_after: 1.5
+
+  # ── 工作日 / 休息日：切标签 → UI 树提取 → 产出 JSON ──
+  - id: "tab_each"
+    type: "for_each"
+    description: "切换工作日/休息日并 UI 树提取计价规则（每标签一个 JSON）"
+    items: ["工作日", "休息日"]
+    item: "tab"
+    steps:
+      - id: "tab_{{.S.tab}}"
+        type: "ocr_click"
+        description: "OCR 识别「{{.S.tab}}」标签页并点击（进页导航，零 LLM）"
+        text: "{{.S.tab}}"
+        cache_key: "tab_{{.S.tab}}"
+        wait_after: 0.5
+
+      - id: "fare_ui_{{.S.tab}}"
+        type: "fare_detail_ui"
+        description: "UI 树提取「{{.S.tab}}」计价规则（dump→下滑→拼接→写 JSON）"
+        max_rounds: 12
+        scroll_wait: 0.6
+
+  # ── 返回 ×2：详细计价页 → 计价弹窗 → 打车页（PERF-02 确定性返回）──
+  - id: "exit_detail"
+    type: "back"
+    description: "返回计价弹窗"
+    wait_after: 0.8
+
+  - id: "exit_popup"
+    type: "back"
+    description: "返回打车页"
+    wait_after: 0.8
