@@ -461,8 +461,7 @@ def test_v2_flow_end_to_end():
         # 1. 计价子流程执行：循环终止（economy_ended=true）且两个供应商都被处理
         assert engine.state["_processed"] == {"曹操出行", "阳光出行"}, engine.state["_processed"]
         assert engine.state["economy_ended"] is True
-        # 2. 全选状态被 verify 校验
-        assert engine.state["select_all_done"] is True
+        # 2. （新架构：全选经济已从流程移除；勾选保证在点问号前按单运力商执行）
         # 3. ground 描述渲染了供应商
         descs = [c.args[1] for c in grounder.ground.call_args_list]
         assert any("曹操出行" in d for d in descs), "缺少供应商模板渲染"
@@ -482,12 +481,11 @@ def test_v2_flow_end_to_end():
         assert any("_休息日_scroll_0_阳光出行.jpg" in n for n in shots), shots
         # 6. VLM 统计
         assert engine.stats["vlm_calls"] > 0, engine.stats["vlm_calls"]
-        # 7. 每次回到打车页都重新识别供应商（S2 至少 3 轮）+ 检查全选经济（至少 3 次）
+        # 7. 每次回到打车页都重新识别供应商（S2 至少 3 轮）
+        #    （新架构：全选经济已移除，勾选保证在点问号前执行）
         s2_calls = [c for c in grounder.query_text.call_args_list
                     if "经济型" in str(c.args[1])]
         assert len(s2_calls) >= 3, f"每轮应重新识别供应商, 实际 {len(s2_calls)} 次"
-        assert mock_ensure.call_count >= 3, \
-            f"每次回打车页应检查全选经济, 实际 {mock_ensure.call_count} 次"
         # 8. 不重复采集：每个供应商恰好被采集一次（_processed 无重复）
         assert engine.state["_processed"] == {"曹操出行", "阳光出行"}, engine.state["_processed"]
         # 9. 采集完成：关闭（kill）应用
@@ -661,8 +659,7 @@ def test_v2_flow_scroll_boundary_first_screen_all_collected():
         assert len(jump_grounds) == 1, f"jump_economy 应仅 1 次, 实际 {len(jump_grounds)}"
         # 4) S2 识别 3 次：第一屏 1 次 + 下滑后 2 轮（各识别并采集 1 个）
         assert s2_calls["n"] == 3, f"S2 应 3 次, 实际 {s2_calls['n']}"
-        # 5) 每轮都检查全选经济（≥3 次）
-        assert engine.state.get("select_all_done") is True
+        # 5) （新架构：全选经济已移除，改为点问号前单运力商勾选保证）
         engine.cleanup()
     return "PASS ✓"
 

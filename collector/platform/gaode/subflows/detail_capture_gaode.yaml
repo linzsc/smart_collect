@@ -8,15 +8,16 @@ description: "S3a 点问号 → S3c 查看详细计价规则 → 工作日/休�
 steps:
   # ── S3a: 点「{{.S.supplier}}」问号（找不到则跳过，等价 FSM 找不到问号跳过）──
   - id: "q_{{.S.supplier}}"
-    type: "ground_click"
-    description: "点「{{.S.supplier}}」问号"
+    type: "ui_tree_click"
+    description: "点「{{.S.supplier}}」问号（UI 树优先，回退 VLM）"
     optional: true
+    ui_target: "q_button"
     ref_image: "button_to_price.png"
-    ground:
+    wait_after: 1.2
+    fallback_ground:
       element_desc: "找「{{.S.supplier}}」行「预估」前面的 '?' 问号。附件是参考图。返回 bbox 和中心坐标。"
       retry_alt_descs:
         - "「{{.S.supplier}}」行价格右侧的问号图标按钮"
-    wait_after: 1.2
 
   - id: "popup_wait"
     type: "wait"

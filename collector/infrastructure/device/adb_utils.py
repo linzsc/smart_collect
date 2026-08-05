@@ -200,6 +200,39 @@ class AdbTools:
         )
         time.sleep(self.action_delay)
 
+
+    def dump_ui_tree(
+        self,
+        remote_path: str = "/sdcard/ma_ui_tree.xml",
+        retry: int = 2,
+        timeout: float = 15.0,
+    ) -> str | None:
+        """Dump 当前 UI 层级（uiautomator）并返回 XML 文本。
+
+        失败（WebView/FLAG_SECURE/设备繁忙/dump 超时）返回 None，由调用方回退。
+        """
+        device_flag = f" -s {self.device}" if self.device else ""
+        for _ in range(retry):
+            try:
+                dump = subprocess.run(
+                    f"{self.adb_path}{device_flag} shell uiautomator dump {remote_path}",
+                    capture_output=True, text=True, shell=True, timeout=timeout,
+                )
+                out = (dump.stdout + dump.stderr).lower()
+                if dump.returncode != 0 or "dumped" not in out:
+                    time.sleep(0.5)
+                    continue
+                cat = subprocess.run(
+                    f"{self.adb_path}{device_flag} shell cat {remote_path}",
+                    capture_output=True, text=True, shell=True, timeout=timeout,
+                )
+                if cat.returncode == 0 and cat.stdout.strip():
+                    return cat.stdout
+            except subprocess.TimeoutExpired:
+                pass
+            time.sleep(0.5)
+        return None
+
     def key_enter(self) -> None:
         """Press the Enter/Return key."""
         self._run("shell input keyevent 66")

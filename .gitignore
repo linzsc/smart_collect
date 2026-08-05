@@ -26,3 +26,6 @@ assets/select_all_yes/
 assets/select_all_no/
 output2/
 result2/
+
+# UI 树采集运行数据（勿提交）
+data/

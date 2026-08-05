@@ -6,15 +6,16 @@ description: "点问号 → 查看详细计价规则 → 截图 → 返回×2（
 
 steps:
   - id: "q_{{.S.supplier}}"
-    type: "ground_click"
-    description: "点「{{.S.supplier}}」问号（测试进入计价页）"
+    type: "ui_tree_click"
+    description: "点「{{.S.supplier}}」问号（测试进入计价页；UI 树优先，回退 VLM）"
     optional: true
+    ui_target: "q_button"
     ref_image: "button_to_price.png"
-    ground:
+    wait_after: 1.2
+    fallback_ground:
       element_desc: "找「{{.S.supplier}}」行「预估」前面的 '?' 问号。附件是参考图。返回 bbox 和中心坐标。"
       retry_alt_descs:
         - "「{{.S.supplier}}」行价格右侧的问号图标按钮"
-    wait_after: 1.2
 
   - id: "detail_btn_{{.S.supplier}}"
     type: "ocr_click"

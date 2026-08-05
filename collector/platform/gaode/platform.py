@@ -77,10 +77,146 @@ def _organize_result_screenshots(engine) -> None:
 # 平台特有步骤：select_all（目标锚定的幂等全选，SEL-01）
 # ---------------------------------------------------------------------------
 
+def _ensure_select_all_ui_tree(engine, label: str) -> bool:
+    """UI 树幂等全选：定位「全选经济」勾选框，用经济型行 desc 推断勾选状态。
+
+    全部已选 → 跳过点击；未全选 → 点击勾选框 → 重验。失败返回 False（回退 VLM）。
+    """
+    from collector.platform.gaode.ui_tree_supplier import (
+        extract_economy_suppliers,
+        locate_select_all,
+        nodes_from_xml,
+    )
+
+    try:
+        xml = engine.adb.dump_ui_tree()
+        if not xml or not isinstance(xml, str):
+            return False
+        nodes = nodes_from_xml(xml)
+        sel = locate_select_all(nodes, label)
+        if sel is None:
+            engine._log("  [全选] UI树未找到勾选框，回退 VLM")
+            return False
+        res = extract_economy_suppliers(nodes)
+        rows = res.suppliers
+        if not rows:
+            engine._log("  [全选] UI树无经济型行可推断，回退 VLM")
+            return False
+        engine.state["_ui_tree_nodes"] = nodes
+
+        if all(r.selected for r in rows):
+            engine._log(f"  [全选] UI树: 已勾选（{len(rows)} 行全部已选），跳过点击")
+            return True
+
+        cx, cy = sel["checkbox"]["center"]
+        engine._log(f"  [全选] UI树: 未全选，点击勾选框 ({cx},{cy})")
+        engine.adb.click(cx, cy)
+        engine._wait(engine.timing.get("after_tap_wait", 2.0), "after_select_all")
+        xml2 = engine.adb.dump_ui_tree()
+        if not xml2 or not isinstance(xml2, str):
+            return False
+        res2 = extract_economy_suppliers(nodes_from_xml(xml2))
+        if res2.suppliers and all(r.selected for r in res2.suppliers):
+            engine._log(f"  [全选] UI树: 点击后 {len(res2.suppliers)} 行全部已选 ✓")
+            return True
+        engine._log("  [全选] UI树点击后仍未全选，回退 VLM")
+        return False
+    except Exception as e:  # noqa: BLE001
+        engine._log(f"  [全选] UI树异常({e})，回退 VLM")
+        return False
+
+
+
+def handle_ui_tree_click(engine, step: dict) -> bool:
+    """ui_tree_click：用 UI 树定位目标并点击（零 LLM）。
+
+    ui_target:
+      - rail_economy : 左侧导航「经济」
+      - q_button     : 当前运力商行的「?」问号（supplier 取自 state）
+    成功返回 True；UI 树不可用/找不到返回 False（由 flow_engine 回退 VLM ground_click）。
+    """
+    target = step.get("ui_target", "")
+    nodes = engine.state.get("_ui_tree_nodes")
+    if not nodes:
+        xml = engine.adb.dump_ui_tree()
+        if not xml or not isinstance(xml, str):
+            engine._log(f"  [UI树点击] dump 失败，回退 VLM ({target})")
+            return False
+        from collector.platform.gaode.ui_tree_supplier import nodes_from_xml
+        nodes = nodes_from_xml(xml)
+        engine.state["_ui_tree_nodes"] = nodes
+
+    from collector.platform.gaode.ui_tree_supplier import (
+        locate_q_button,
+        locate_rail_category,
+        locate_row_elements,
+        locate_supplier_row,
+        nodes_from_xml,
+        parse_supplier_desc,
+    )
+
+    if target == "rail_economy":
+        node = locate_rail_category(nodes, "经济")
+        if node is None:
+            engine._log("  [UI树点击] 未找到左侧导航「经济」，回退 VLM")
+            return False
+        cx, cy = node["center"]
+        engine._log(f"  [UI树点击] 左侧导航「经济」@ ({cx},{cy})")
+        engine.adb.click(cx, cy)
+        engine._wait(step.get("wait_after", 0.5), "ui_rail_wait")
+        return True
+
+    if target == "q_button":
+        supplier = str(engine.state.get("supplier", "")).strip()
+        row = locate_supplier_row(nodes, supplier) if supplier else None
+        if row is None:
+            engine._log(f"  [UI树点击] 未找到「{supplier or '?'}」行，回退 VLM")
+            return False
+
+        # ── 勾选保证：被勾选才会有「?」→ 未选先点勾选框，重验后再点问号 ──
+        if parse_supplier_desc(row.get("content_desc") or "").get("selected") is False:
+            cb = locate_row_elements(nodes, row).checkbox
+            if cb is None:
+                engine._log(f"  [UI树点击] 「{supplier}」未勾选且找不到勾选框，回退 VLM")
+                return False
+            cx, cy = cb["center"]
+            engine._log(f"  [UI树点击] 「{supplier}」未勾选 → 点勾选框 ({cx},{cy})")
+            engine.adb.click(cx, cy)
+            engine._wait(step.get("ensure_wait", 0.8), "ui_check_wait")
+            xml = engine.adb.dump_ui_tree()
+            if not xml or not isinstance(xml, str):
+                return False
+            nodes = nodes_from_xml(xml)
+            engine.state["_ui_tree_nodes"] = nodes
+            row = locate_supplier_row(nodes, supplier)
+            if row is None or parse_supplier_desc(row.get("content_desc") or "").get("selected") is not True:
+                engine._log(f"  [UI树点击] 「{supplier}」勾选后仍未选中，回退 VLM")
+                return False
+            engine._log(f"  [UI树点击] 「{supplier}」已勾选 ✓")
+
+        q = locate_q_button(nodes, row)
+        if q is None:
+            engine._log(f"  [UI树点击] 未找到「{supplier}」问号，回退 VLM")
+            return False
+        cx, cy = q["center"]
+        engine._log(f"  [UI树点击] 「{supplier}」问号 @ ({cx},{cy})")
+        engine.adb.click(cx, cy)
+        engine._wait(step.get("wait_after", 1.2), "ui_q_wait")
+        return True
+
+    engine._log(f"  [UI树点击] 未知 ui_target: {target}，回退 VLM")
+    return False
+
+
 def handle_select_all(engine, step: dict) -> None:
     """执行「全选/全选经济」幂等勾选（YAML 步骤 type: select_all）。"""
     label = step.get("label", "全选")
     engine._log(f"── 全选勾选: {label} ──")
+
+    if _ensure_select_all_ui_tree(engine, label):
+        engine.state["select_all_done"] = True   # 供 verify 步骤断言
+        engine._log(f"  ✓ {label} 已勾选（UI 树）")
+        return
 
     from collector.platform.gaode.select_all import ensure_all_selected
 
@@ -97,7 +233,7 @@ def handle_select_all(engine, step: dict) -> None:
         wait_after_click=engine.timing.get("after_tap_wait", 2.0),
     )
     engine.state["select_all_done"] = True   # 供 verify 步骤断言
-    engine._log(f"  ✓ {label} 已勾选")
+    engine._log(f"  ✓ {label} 已勾选（VLM）")
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +281,7 @@ def build_platform() -> Platform:
         add_cli_args=add_cli_args,
         build_flow_vars=build_flow_vars,
         step_handlers={
+            "ui_tree_click": handle_ui_tree_click,
             "select_all": handle_select_all,
             "pricing_result_organize": handle_pricing_result_organize,
             "s2_list_suppliers": handle_s2_list_suppliers,

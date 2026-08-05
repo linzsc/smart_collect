@@ -24,6 +24,15 @@ def _is_skipped(name: str) -> bool:
     return name in _SKIP_EXACT or any(kw in name for kw in _SKIP_KEYWORDS)
 
 
+
+
+def is_skipped_supplier(name: str) -> bool:
+    """是否应排除：精确命中平台产品/栏目标题，或名称含出租车/UI 等关键词。
+
+    供 VLM 解析与 UI 树解析共用（单一过滤源）。
+    """
+    return _is_skipped(name)
+
 def parse_suppliers_response(raw: str) -> tuple[list[str], bool]:
     """解析 S2 VLM 响应 → (suppliers, economy_ended)（CAP-09/11）。
 

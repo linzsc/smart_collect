@@ -19,29 +19,19 @@ steps:
     duration_ms: 800
     after_wait: 1.5
 
-  # S1: 全选经济（目标锚定幂等）
-  - id: "select_all_economy"
-    type: "select_all"
-    description: "在打车页勾选全选经济"
-    label: "全选经济"
-
-  - id: "verify_select_all"
-    type: "verify"
-    description: "校验全选状态"
-    expect_state:
-      select_all_done: true
-
   # ② 进入循环前，点击左侧导航「经济」锚定经济型列表开头（仅此一次）
+  #    （勾选保证在子流程点「?」前按单运力商执行，不再需要「全选经济」）
   #    ⚠️ 不在循环内点击：循环内点击会把 s4_scroll 的下滑位置重置回列表顶部，
   #       导致永远滚不到下面的新运力商（重复点击、无意义空转）
   - id: "jump_economy"
-    type: "ground_click"
-    description: "点击左侧导航「经济」，定位到经济型列表开头（仅进入循环前执行一次）"
-    ground:
+    type: "ui_tree_click"
+    description: "点击左侧导航「经济」，定位到经济型列表开头（仅进入循环前执行一次；UI 树优先，回退 VLM）"
+    ui_target: "rail_economy"
+    wait_after: 0.5
+    fallback_ground:
       element_desc: "页面左侧竖排车型导航栏中的「经济」分类标签（与「舒适」「品质」「优享」等并列，当前可能高亮）。返回 bbox 和中心坐标。"
       retry_alt_descs:
         - "左侧导航栏中的「经济」选项，点击后车型列表定位到经济型开头"
-    wait_after: 0.5
 
   # 外层循环：每次回到打车页都重新识别供应商 + 检查全选经济，再采集第一个新供应商
   - id: "supplier_loop"
@@ -50,19 +40,8 @@ steps:
     until_handler: "pricing_loop_done"
     max_rounds: 15
     steps:
-      # ① 从计价页返回打车页时页面可能刷新 → 先校验全选经济（幂等：已勾选则跳过）
-      - id: "check_select_all"
-        type: "select_all"
-        description: "检查/确保全选经济已勾选（返回打车页后可能刷新）"
-        label: "全选经济"
-
-      - id: "verify_select_all"
-        type: "verify"
-        description: "校验全选状态"
-        expect_state:
-          select_all_done: true
-
-      # ② 重新识别当前屏供应商（下滑后列表位置保留；只返回未采集过的）
+      # ① 重新识别当前屏供应商（下滑后列表位置保留；只返回未采集过的）
+      #    （勾选保证在子流程点「?」前按单运力商执行）
       - id: "s2_list"
         type: "extract_list"
         description: "识别当前屏经济型运力商（未采集）"

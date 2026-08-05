@@ -175,6 +175,8 @@ class FlowEngine:
                     self._do_open_app(step)
                 elif step_type == "ground_click":
                     self._do_ground_click(step)
+                elif step_type == "ui_tree_click":
+                    self._do_ui_tree_click(step)
                 elif step_type == "ocr_click":
                     self._do_ocr_click(step)
                 elif step_type == "ground_doublecheck":
@@ -299,6 +301,33 @@ class FlowEngine:
                 if target in (b.text or ""):
                     return b
         return None
+
+
+    def _do_ui_tree_click(self, step: dict) -> None:
+        """UI 树点击：平台 handler 定位目标并点击（零 LLM）。
+
+        - 平台 handler（ui_tree_click）成功 → 完成；
+        - 失败/不可用 → 回退 VLM ground_click（保留旧 ground 配置，兼容视觉模式）。
+        """
+        handler = self._platform_step_handlers.get("ui_tree_click")
+        if handler is not None:
+            try:
+                if handler(self, step):
+                    return
+            except StepFailed:
+                pass  # 回退
+
+        fallback = step.get("fallback_ground")
+        if fallback:
+            merged = dict(step)
+            merged.pop("fallback_ground", None)
+            merged["type"] = "ground_click"
+            merged["ground"] = fallback
+            self._do_ground_click(merged)
+            return
+        raise StepFailed(
+            f"ui_tree_click: 无法定位 ui_target={step.get('ui_target')} 且无回退"
+        )
 
     def _do_ground_click(self, step: dict) -> None:
         # ── 坐标缓存（PERF-03 语义）：cache_key 命中直接点击，不调 VLM/不截图 ──

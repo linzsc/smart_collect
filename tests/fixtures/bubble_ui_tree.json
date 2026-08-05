@@ -1,0 +1,5621 @@
+{
+ "page": "bubble",
+ "nodes": [
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 26,
+   "top": 166,
+   "right": 143,
+   "bottom": 283,
+   "center": [
+    84,
+    224
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 26,
+   "top": 166,
+   "right": 143,
+   "bottom": 283,
+   "center": [
+    84,
+    224
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 296,
+   "top": 2301,
+   "right": 904,
+   "bottom": 2275,
+   "center": [
+    600,
+    2288
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2301,
+   "right": 491,
+   "bottom": 2265,
+   "center": [
+    401,
+    2283
+   ]
+  },
+  {
+   "text": "查看更多已选车型",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 504,
+   "top": 2301,
+   "right": 816,
+   "bottom": 2255,
+   "center": [
+    660,
+    2278
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2301,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    2485
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2301,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    2485
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2424,
+   "right": 1200,
+   "bottom": 2619,
+   "center": [
+    600,
+    2521
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 52,
+   "top": 2424,
+   "right": 1148,
+   "bottom": 2619,
+   "center": [
+    600,
+    2521
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 52,
+   "top": 2424,
+   "right": 758,
+   "bottom": 2619,
+   "center": [
+    405,
+    2521
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 91,
+   "top": 2424,
+   "right": 758,
+   "bottom": 2619,
+   "center": [
+    424,
+    2521
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 91,
+   "top": 2437,
+   "right": 758,
+   "bottom": 2536,
+   "center": [
+    424,
+    2486
+   ]
+  },
+  {
+   "text": "预估",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 91,
+   "top": 2476,
+   "right": 197,
+   "bottom": 2523,
+   "center": [
+    144,
+    2499
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 196,
+   "top": 2437,
+   "right": 391,
+   "bottom": 2536,
+   "center": [
+    293,
+    2486
+   ]
+  },
+  {
+   "text": "12",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 196,
+   "top": 2437,
+   "right": 272,
+   "bottom": 2536,
+   "center": [
+    234,
+    2486
+   ]
+  },
+  {
+   "text": "-",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 272,
+   "top": 2437,
+   "right": 318,
+   "bottom": 2536,
+   "center": [
+    295,
+    2486
+   ]
+  },
+  {
+   "text": "17",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 317,
+   "top": 2437,
+   "right": 390,
+   "bottom": 2536,
+   "center": [
+    353,
+    2486
+   ]
+  },
+  {
+   "text": "元起",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 391,
+   "top": 2476,
+   "right": 497,
+   "bottom": 2523,
+   "center": [
+    444,
+    2499
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 91,
+   "top": 2536,
+   "right": 758,
+   "bottom": 2543,
+   "center": [
+    424,
+    2539
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 91,
+   "top": 2543,
+   "right": 758,
+   "bottom": 2593,
+   "center": [
+    424,
+    2568
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 91,
+   "top": 2543,
+   "right": 346,
+   "bottom": 2593,
+   "center": [
+    218,
+    2568
+   ]
+  },
+  {
+   "text": "最高优惠4.4元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 108,
+   "top": 2544,
+   "right": 327,
+   "bottom": 2591,
+   "center": [
+    217,
+    2567
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 758,
+   "top": 2424,
+   "right": 1148,
+   "bottom": 2619,
+   "center": [
+    953,
+    2521
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 758,
+   "top": 2424,
+   "right": 1148,
+   "bottom": 2619,
+   "center": [
+    953,
+    2521
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 834,
+   "top": 2484,
+   "right": 1071,
+   "bottom": 2557,
+   "center": [
+    952,
+    2520
+   ]
+  },
+  {
+   "text": "立即打车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 834,
+   "top": 2484,
+   "right": 1071,
+   "bottom": 2557,
+   "center": [
+    952,
+    2520
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 52,
+   "top": 2301,
+   "right": 1148,
+   "bottom": 2425,
+   "center": [
+    600,
+    2363
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 52,
+   "top": 2301,
+   "right": 326,
+   "bottom": 2425,
+   "center": [
+    189,
+    2363
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 71,
+   "top": 2340,
+   "right": 306,
+   "bottom": 2386,
+   "center": [
+    188,
+    2363
+   ]
+  },
+  {
+   "text": "现在",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 177,
+   "top": 2340,
+   "right": 255,
+   "bottom": 2386,
+   "center": [
+    216,
+    2363
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 326,
+   "top": 2301,
+   "right": 600,
+   "bottom": 2425,
+   "center": [
+    463,
+    2363
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 345,
+   "top": 2340,
+   "right": 580,
+   "bottom": 2386,
+   "center": [
+    462,
+    2363
+   ]
+  },
+  {
+   "text": "帮人叫车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 412,
+   "top": 2340,
+   "right": 568,
+   "bottom": 2386,
+   "center": [
+    490,
+    2363
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 600,
+   "top": 2301,
+   "right": 874,
+   "bottom": 2425,
+   "center": [
+    737,
+    2363
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 619,
+   "top": 2340,
+   "right": 854,
+   "bottom": 2386,
+   "center": [
+    736,
+    2363
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 619,
+   "top": 2340,
+   "right": 854,
+   "bottom": 2386,
+   "center": [
+    736,
+    2363
+   ]
+  },
+  {
+   "text": "偏好设置",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 686,
+   "top": 2340,
+   "right": 842,
+   "bottom": 2386,
+   "center": [
+    764,
+    2363
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 874,
+   "top": 2301,
+   "right": 1148,
+   "bottom": 2425,
+   "center": [
+    1011,
+    2363
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 893,
+   "top": 2340,
+   "right": 1128,
+   "bottom": 2386,
+   "center": [
+    1010,
+    2363
+   ]
+  },
+  {
+   "text": "新能源车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 960,
+   "top": 2340,
+   "right": 1116,
+   "bottom": 2386,
+   "center": [
+    1038,
+    2363
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2619,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    2644
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 26,
+   "top": 744,
+   "right": 1057,
+   "bottom": 881,
+   "center": [
+    541,
+    812
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 26,
+   "top": 744,
+   "right": 161,
+   "bottom": 881,
+   "center": [
+    93,
+    812
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1057,
+   "top": 625,
+   "right": 1174,
+   "bottom": 742,
+   "center": [
+    1115,
+    683
+   ]
+  },
+  {
+   "text": "选路线",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 1076,
+   "top": 699,
+   "right": 1154,
+   "bottom": 736,
+   "center": [
+    1115,
+    717
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1063,
+   "top": 751,
+   "right": 1167,
+   "bottom": 753,
+   "center": [
+    1115,
+    752
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1057,
+   "top": 763,
+   "right": 1174,
+   "bottom": 880,
+   "center": [
+    1115,
+    821
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1057,
+   "top": 166,
+   "right": 1174,
+   "bottom": 283,
+   "center": [
+    1115,
+    224
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "我的卡券",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1057,
+   "top": 166,
+   "right": 1174,
+   "bottom": 283,
+   "center": [
+    1115,
+    224
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 1321,
+   "center": [
+    600,
+    1114
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 32,
+   "top": 926,
+   "right": 1167,
+   "bottom": 1050,
+   "center": [
+    599,
+    988
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 32,
+   "top": 926,
+   "right": 1167,
+   "bottom": 1050,
+   "center": [
+    599,
+    988
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 32,
+   "top": 926,
+   "right": 1167,
+   "bottom": 1050,
+   "center": [
+    599,
+    988
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 32,
+   "top": 926,
+   "right": 1167,
+   "bottom": 1050,
+   "center": [
+    599,
+    988
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 32,
+   "top": 926,
+   "right": 1167,
+   "bottom": 1050,
+   "center": [
+    599,
+    988
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 32,
+   "top": 926,
+   "right": 1167,
+   "bottom": 1050,
+   "center": [
+    599,
+    988
+   ]
+  },
+  {
+   "text": "特惠快车堵车不加价，若变更行程将重新计算价格",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 113,
+   "top": 961,
+   "right": 1086,
+   "bottom": 1013,
+   "center": [
+    599,
+    987
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1092,
+   "top": 958,
+   "right": 1151,
+   "bottom": 1017,
+   "center": [
+    1121,
+    987
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1050,
+   "right": 1200,
+   "bottom": 1321,
+   "center": [
+    600,
+    1185
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1076,
+   "right": 1200,
+   "bottom": 1148,
+   "center": [
+    600,
+    1112
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 52,
+   "top": 1076,
+   "right": 557,
+   "bottom": 1148,
+   "center": [
+    304,
+    1112
+   ]
+  },
+  {
+   "text": "已选 18 个车型，应答约 23 秒",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 52,
+   "top": 1076,
+   "right": 557,
+   "bottom": 1148,
+   "center": [
+    304,
+    1112
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1173,
+   "right": 1200,
+   "bottom": 1321,
+   "center": [
+    600,
+    1247
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1173,
+   "right": 1200,
+   "bottom": 1277,
+   "center": [
+    600,
+    1225
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1173,
+   "right": 1200,
+   "bottom": 1277,
+   "center": [
+    600,
+    1225
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 52,
+   "top": 1173,
+   "right": 1148,
+   "bottom": 1277,
+   "center": [
+    600,
+    1225
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 52,
+   "top": 1173,
+   "right": 1148,
+   "bottom": 1277,
+   "center": [
+    600,
+    1225
+   ]
+  },
+  {
+   "text": "¥ 12",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 62,
+   "top": 1194,
+   "right": 164,
+   "bottom": 1254,
+   "center": [
+    113,
+    1224
+   ]
+  },
+  {
+   "text": "¥ 12",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 64,
+   "top": 1194,
+   "right": 163,
+   "bottom": 1254,
+   "center": [
+    113,
+    1224
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 58,
+   "top": 1195,
+   "right": 1141,
+   "bottom": 1254,
+   "center": [
+    599,
+    1224
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 66,
+   "top": 1195,
+   "right": 1141,
+   "bottom": 1254,
+   "center": [
+    603,
+    1224
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 74,
+   "top": 1195,
+   "right": 1141,
+   "bottom": 1254,
+   "center": [
+    607,
+    1224
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 455,
+   "top": 1195,
+   "right": 1141,
+   "bottom": 1254,
+   "center": [
+    798,
+    1224
+   ]
+  },
+  {
+   "text": "¥ 17",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 452,
+   "top": 1194,
+   "right": 553,
+   "bottom": 1254,
+   "center": [
+    502,
+    1224
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 674,
+   "top": 1186,
+   "right": 841,
+   "bottom": 1264,
+   "center": [
+    757,
+    1225
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 674,
+   "top": 1186,
+   "right": 841,
+   "bottom": 1264,
+   "center": [
+    757,
+    1225
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 674,
+   "top": 1186,
+   "right": 841,
+   "bottom": 1264,
+   "center": [
+    757,
+    1225
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 674,
+   "top": 1273,
+   "right": 841,
+   "bottom": 1264,
+   "center": [
+    757,
+    1268
+   ]
+  },
+  {
+   "text": "¥ 20",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 674,
+   "top": 1273,
+   "right": 718,
+   "bottom": 1264,
+   "center": [
+    696,
+    1268
+   ]
+  },
+  {
+   "text": "更快应答",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 724,
+   "top": 1274,
+   "right": 841,
+   "bottom": 1264,
+   "center": [
+    782,
+    1269
+   ]
+  },
+  {
+   "text": "¥ 38",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 1032,
+   "top": 1194,
+   "right": 1138,
+   "bottom": 1254,
+   "center": [
+    1085,
+    1224
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1995
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1321,
+   "right": 182,
+   "bottom": 2670,
+   "center": [
+    91,
+    1995
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1321,
+   "right": 182,
+   "bottom": 2670,
+   "center": [
+    91,
+    1995
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1321,
+   "right": 182,
+   "bottom": 2670,
+   "center": [
+    91,
+    1995
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1321,
+   "right": 182,
+   "bottom": 1477,
+   "center": [
+    91,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1376,
+   "right": 182,
+   "bottom": 1422,
+   "center": [
+    91,
+    1399
+   ]
+  },
+  {
+   "text": "推荐",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 52,
+   "top": 1376,
+   "right": 130,
+   "bottom": 1422,
+   "center": [
+    91,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1477,
+   "right": 182,
+   "bottom": 1633,
+   "center": [
+    91,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1532,
+   "right": 182,
+   "bottom": 1578,
+   "center": [
+    91,
+    1555
+   ]
+  },
+  {
+   "text": "拼车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 52,
+   "top": 1532,
+   "right": 130,
+   "bottom": 1578,
+   "center": [
+    91,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1633,
+   "right": 182,
+   "bottom": 1789,
+   "center": [
+    91,
+    1711
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1658,
+   "right": 182,
+   "bottom": 1704,
+   "center": [
+    91,
+    1681
+   ]
+  },
+  {
+   "text": "特惠快车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 13,
+   "top": 1658,
+   "right": 169,
+   "bottom": 1704,
+   "center": [
+    91,
+    1681
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 65,
+   "top": 1718,
+   "right": 117,
+   "bottom": 1764,
+   "center": [
+    91,
+    1741
+   ]
+  },
+  {
+   "text": "4",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 68,
+   "top": 1718,
+   "right": 114,
+   "bottom": 1764,
+   "center": [
+    91,
+    1741
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1789,
+   "right": 182,
+   "bottom": 1945,
+   "center": [
+    91,
+    1867
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1814,
+   "right": 182,
+   "bottom": 1860,
+   "center": [
+    91,
+    1837
+   ]
+  },
+  {
+   "text": "经济",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 52,
+   "top": 1814,
+   "right": 130,
+   "bottom": 1860,
+   "center": [
+    91,
+    1837
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 64,
+   "top": 1874,
+   "right": 118,
+   "bottom": 1920,
+   "center": [
+    91,
+    1897
+   ]
+  },
+  {
+   "text": "14",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 64,
+   "top": 1874,
+   "right": 118,
+   "bottom": 1920,
+   "center": [
+    91,
+    1897
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 1945,
+   "right": 182,
+   "bottom": 2101,
+   "center": [
+    91,
+    2023
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2000,
+   "right": 182,
+   "bottom": 2046,
+   "center": [
+    91,
+    2023
+   ]
+  },
+  {
+   "text": "特快车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 32,
+   "top": 2000,
+   "right": 149,
+   "bottom": 2046,
+   "center": [
+    90,
+    2023
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2101,
+   "right": 182,
+   "bottom": 2257,
+   "center": [
+    91,
+    2179
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2126,
+   "right": 182,
+   "bottom": 2172,
+   "center": [
+    91,
+    2149
+   ]
+  },
+  {
+   "text": "出租",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 52,
+   "top": 2126,
+   "right": 130,
+   "bottom": 2172,
+   "center": [
+    91,
+    2149
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 65,
+   "top": 2186,
+   "right": 117,
+   "bottom": 2232,
+   "center": [
+    91,
+    2209
+   ]
+  },
+  {
+   "text": "5",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 68,
+   "top": 2186,
+   "right": 114,
+   "bottom": 2232,
+   "center": [
+    91,
+    2209
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2257,
+   "right": 182,
+   "bottom": 2413,
+   "center": [
+    91,
+    2335
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2312,
+   "right": 182,
+   "bottom": 2358,
+   "center": [
+    91,
+    2335
+   ]
+  },
+  {
+   "text": "优享",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 52,
+   "top": 2312,
+   "right": 130,
+   "bottom": 2358,
+   "center": [
+    91,
+    2335
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2413,
+   "right": 182,
+   "bottom": 2569,
+   "center": [
+    91,
+    2491
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2468,
+   "right": 182,
+   "bottom": 2514,
+   "center": [
+    91,
+    2491
+   ]
+  },
+  {
+   "text": "专车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 52,
+   "top": 2468,
+   "right": 130,
+   "bottom": 2514,
+   "center": [
+    91,
+    2491
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2569,
+   "right": 182,
+   "bottom": 2670,
+   "center": [
+    91,
+    2619
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 2624,
+   "right": 182,
+   "bottom": 2670,
+   "center": [
+    91,
+    2647
+   ]
+  },
+  {
+   "text": "六座",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 52,
+   "top": 2624,
+   "right": 130,
+   "bottom": 2670,
+   "center": [
+    91,
+    2647
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    1995
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    1995
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    1995
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    1995
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 1846,
+   "center": [
+    691,
+    1583
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 1846,
+   "center": [
+    691,
+    1583
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 1846,
+   "center": [
+    691,
+    1583
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 1846,
+   "center": [
+    691,
+    1583
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 1477,
+   "center": [
+    691,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 1477,
+   "center": [
+    691,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 1477,
+   "center": [
+    691,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 1477,
+   "center": [
+    691,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1321,
+   "right": 312,
+   "bottom": 1477,
+   "center": [
+    247,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 221,
+   "top": 1366,
+   "right": 286,
+   "bottom": 1431,
+   "center": [
+    253,
+    1398
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1321,
+   "right": 947,
+   "bottom": 1477,
+   "center": [
+    629,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1337,
+   "right": 700,
+   "bottom": 1461,
+   "center": [
+    506,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1341,
+   "right": 497,
+   "bottom": 1404,
+   "center": [
+    404,
+    1372
+   ]
+  },
+  {
+   "text": "特价拼车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 1341,
+   "right": 497,
+   "bottom": 1404,
+   "center": [
+    404,
+    1372
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1404,
+   "right": 700,
+   "bottom": 1456,
+   "center": [
+    506,
+    1430
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1404,
+   "right": 577,
+   "bottom": 1456,
+   "center": [
+    444,
+    1430
+   ]
+  },
+  {
+   "text": "先拼再走，一口价",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 1412,
+   "right": 577,
+   "bottom": 1446,
+   "center": [
+    444,
+    1429
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 699,
+   "top": 1337,
+   "right": 946,
+   "bottom": 1461,
+   "center": [
+    822,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 699,
+   "top": 1355,
+   "right": 946,
+   "bottom": 1431,
+   "center": [
+    822,
+    1393
+   ]
+  },
+  {
+   "text": "10.1",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 798,
+   "top": 1355,
+   "right": 902,
+   "bottom": 1431,
+   "center": [
+    850,
+    1393
+   ]
+  },
+  {
+   "text": "元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 902,
+   "top": 1379,
+   "right": 946,
+   "bottom": 1425,
+   "center": [
+    924,
+    1402
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 946,
+   "top": 1321,
+   "right": 1200,
+   "bottom": 1477,
+   "center": [
+    1073,
+    1399
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 972,
+   "top": 1353,
+   "right": 1161,
+   "bottom": 1444,
+   "center": [
+    1066,
+    1398
+   ]
+  },
+  {
+   "text": "去拼车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 1007,
+   "top": 1372,
+   "right": 1124,
+   "bottom": 1424,
+   "center": [
+    1065,
+    1398
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "车型:特惠快车 已选 12.9-12.9 元",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1477,
+   "right": 1200,
+   "bottom": 1633,
+   "center": [
+    691,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1477,
+   "right": 1200,
+   "bottom": 1633,
+   "center": [
+    691,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1477,
+   "right": 1200,
+   "bottom": 1633,
+   "center": [
+    691,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1477,
+   "right": 1200,
+   "bottom": 1633,
+   "center": [
+    691,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1477,
+   "right": 312,
+   "bottom": 1633,
+   "center": [
+    247,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 221,
+   "top": 1522,
+   "right": 286,
+   "bottom": 1587,
+   "center": [
+    253,
+    1554
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1477,
+   "right": 1083,
+   "bottom": 1633,
+   "center": [
+    697,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1493,
+   "right": 709,
+   "bottom": 1617,
+   "center": [
+    510,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1497,
+   "right": 601,
+   "bottom": 1560,
+   "center": [
+    456,
+    1528
+   ]
+  },
+  {
+   "text": "特惠快车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 1497,
+   "right": 497,
+   "bottom": 1560,
+   "center": [
+    404,
+    1528
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 503,
+   "top": 1503,
+   "right": 601,
+   "bottom": 1553,
+   "center": [
+    552,
+    1528
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 504,
+   "top": 1504,
+   "right": 579,
+   "bottom": 1551,
+   "center": [
+    541,
+    1527
+   ]
+  },
+  {
+   "text": "4/7",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 514,
+   "top": 1511,
+   "right": 564,
+   "bottom": 1545,
+   "center": [
+    539,
+    1528
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1560,
+   "right": 709,
+   "bottom": 1612,
+   "center": [
+    510,
+    1586
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1560,
+   "right": 587,
+   "bottom": 1612,
+   "center": [
+    449,
+    1586
+   ]
+  },
+  {
+   "text": "惠民用车 固定价格",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 1568,
+   "right": 587,
+   "bottom": 1602,
+   "center": [
+    449,
+    1585
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 709,
+   "top": 1493,
+   "right": 1083,
+   "bottom": 1617,
+   "center": [
+    896,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 709,
+   "top": 1517,
+   "right": 1083,
+   "bottom": 1582,
+   "center": [
+    896,
+    1549
+   ]
+  },
+  {
+   "text": "12.9-13.4",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 817,
+   "top": 1517,
+   "right": 1038,
+   "bottom": 1582,
+   "center": [
+    927,
+    1549
+   ]
+  },
+  {
+   "text": "元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 1038,
+   "top": 1534,
+   "right": 1082,
+   "bottom": 1580,
+   "center": [
+    1060,
+    1557
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1083,
+   "top": 1477,
+   "right": 1200,
+   "bottom": 1633,
+   "center": [
+    1141,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.widget.ImageView",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1109,
+   "top": 1529,
+   "right": 1161,
+   "bottom": 1581,
+   "center": [
+    1135,
+    1555
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "车型:极速拼车 未选 拼成最高 12.5 元",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1633,
+   "right": 1200,
+   "bottom": 1844,
+   "center": [
+    691,
+    1738
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1633,
+   "right": 1200,
+   "bottom": 1844,
+   "center": [
+    691,
+    1738
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1633,
+   "right": 1200,
+   "bottom": 1844,
+   "center": [
+    691,
+    1738
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1633,
+   "right": 312,
+   "bottom": 1844,
+   "center": [
+    247,
+    1738
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 221,
+   "top": 1706,
+   "right": 286,
+   "bottom": 1771,
+   "center": [
+    253,
+    1738
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1633,
+   "right": 1083,
+   "bottom": 1844,
+   "center": [
+    697,
+    1738
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1649,
+   "right": 773,
+   "bottom": 1828,
+   "center": [
+    542,
+    1738
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1680,
+   "right": 606,
+   "bottom": 1743,
+   "center": [
+    459,
+    1711
+   ]
+  },
+  {
+   "text": "极速拼车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 1680,
+   "right": 497,
+   "bottom": 1743,
+   "center": [
+    404,
+    1711
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 503,
+   "top": 1686,
+   "right": 605,
+   "bottom": 1736,
+   "center": [
+    554,
+    1711
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 504,
+   "top": 1687,
+   "right": 584,
+   "bottom": 1734,
+   "center": [
+    544,
+    1710
+   ]
+  },
+  {
+   "text": "0/5",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 514,
+   "top": 1694,
+   "right": 569,
+   "bottom": 1728,
+   "center": [
+    541,
+    1711
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1744,
+   "right": 773,
+   "bottom": 1796,
+   "center": [
+    542,
+    1770
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1744,
+   "right": 554,
+   "bottom": 1796,
+   "center": [
+    433,
+    1770
+   ]
+  },
+  {
+   "text": "先走再拼 一口价",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 1752,
+   "right": 554,
+   "bottom": 1786,
+   "center": [
+    433,
+    1769
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 772,
+   "top": 1649,
+   "right": 1082,
+   "bottom": 1828,
+   "center": [
+    927,
+    1738
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 772,
+   "top": 1649,
+   "right": 1082,
+   "bottom": 1779,
+   "center": [
+    927,
+    1714
+   ]
+  },
+  {
+   "text": "拼成最高 12.5 元 未拼成最高 15 元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 772,
+   "top": 1649,
+   "right": 1082,
+   "bottom": 1779,
+   "center": [
+    927,
+    1714
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 772,
+   "top": 1780,
+   "right": 1082,
+   "bottom": 1826,
+   "center": [
+    927,
+    1803
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 801,
+   "top": 1780,
+   "right": 1082,
+   "bottom": 1826,
+   "center": [
+    941,
+    1803
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 801,
+   "top": 1780,
+   "right": 1076,
+   "bottom": 1826,
+   "center": [
+    938,
+    1803
+   ]
+  },
+  {
+   "text": "拼成最高省3.2元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 802,
+   "top": 1780,
+   "right": 1073,
+   "bottom": 1826,
+   "center": [
+    937,
+    1803
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1083,
+   "top": 1633,
+   "right": 1200,
+   "bottom": 1844,
+   "center": [
+    1141,
+    1738
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.widget.ImageView",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1109,
+   "top": 1712,
+   "right": 1161,
+   "bottom": 1764,
+   "center": [
+    1135,
+    1738
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 221,
+   "top": 1844,
+   "right": 1200,
+   "bottom": 1846,
+   "center": [
+    710,
+    1845
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1845,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    2257
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1845,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    2257
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1845,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    2257
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1845,
+   "right": 1200,
+   "bottom": 1969,
+   "center": [
+    691,
+    1907
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1845,
+   "right": 1200,
+   "bottom": 1969,
+   "center": [
+    691,
+    1907
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "车型:经济型 已选",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1845,
+   "right": 1200,
+   "bottom": 1969,
+   "center": [
+    691,
+    1907
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1845,
+   "right": 1200,
+   "bottom": 1969,
+   "center": [
+    691,
+    1907
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1845,
+   "right": 1200,
+   "bottom": 1969,
+   "center": [
+    691,
+    1907
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 221,
+   "top": 1887,
+   "right": 411,
+   "bottom": 1942,
+   "center": [
+    316,
+    1914
+   ]
+  },
+  {
+   "text": "经济型·14",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 221,
+   "top": 1887,
+   "right": 398,
+   "bottom": 1942,
+   "center": [
+    309,
+    1914
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 934,
+   "top": 1887,
+   "right": 1160,
+   "bottom": 1942,
+   "center": [
+    1047,
+    1914
+   ]
+  },
+  {
+   "text": "全选经济",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 934,
+   "top": 1889,
+   "right": 1084,
+   "bottom": 1939,
+   "center": [
+    1009,
+    1914
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1109,
+   "top": 1889,
+   "right": 1160,
+   "bottom": 1940,
+   "center": [
+    1134,
+    1914
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1109,
+   "top": 1889,
+   "right": 1160,
+   "bottom": 1940,
+   "center": [
+    1134,
+    1914
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1968,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    2319
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "车型:星徽出行 已选 预估 12 元",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1968,
+   "right": 1200,
+   "bottom": 2135,
+   "center": [
+    691,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1968,
+   "right": 1200,
+   "bottom": 2135,
+   "center": [
+    691,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1968,
+   "right": 1200,
+   "bottom": 2135,
+   "center": [
+    691,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1968,
+   "right": 1200,
+   "bottom": 2135,
+   "center": [
+    691,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 1968,
+   "right": 312,
+   "bottom": 2135,
+   "center": [
+    247,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 221,
+   "top": 2014,
+   "right": 286,
+   "bottom": 2089,
+   "center": [
+    253,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1968,
+   "right": 1083,
+   "bottom": 2135,
+   "center": [
+    697,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1984,
+   "right": 817,
+   "bottom": 2119,
+   "center": [
+    564,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 1993,
+   "right": 497,
+   "bottom": 2056,
+   "center": [
+    404,
+    2024
+   ]
+  },
+  {
+   "text": "星徽出行",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 1993,
+   "right": 497,
+   "bottom": 2056,
+   "center": [
+    404,
+    2024
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2057,
+   "right": 817,
+   "bottom": 2109,
+   "center": [
+    564,
+    2083
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2057,
+   "right": 445,
+   "bottom": 2109,
+   "center": [
+    378,
+    2083
+   ]
+  },
+  {
+   "text": "五星平台",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 2065,
+   "right": 445,
+   "bottom": 2099,
+   "center": [
+    378,
+    2082
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 458,
+   "top": 2057,
+   "right": 591,
+   "bottom": 2109,
+   "center": [
+    524,
+    2083
+   ]
+  },
+  {
+   "text": "敢坐敢赔",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 458,
+   "top": 2065,
+   "right": 591,
+   "bottom": 2099,
+   "center": [
+    524,
+    2082
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 816,
+   "top": 1984,
+   "right": 1083,
+   "bottom": 2119,
+   "center": [
+    949,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 816,
+   "top": 1984,
+   "right": 1083,
+   "bottom": 2060,
+   "center": [
+    949,
+    2022
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 835,
+   "top": 2005,
+   "right": 894,
+   "bottom": 2055,
+   "center": [
+    864,
+    2030
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 835,
+   "top": 2005,
+   "right": 894,
+   "bottom": 2055,
+   "center": [
+    864,
+    2030
+   ]
+  },
+  {
+   "text": "预估",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 903,
+   "top": 2008,
+   "right": 979,
+   "bottom": 2054,
+   "center": [
+    941,
+    2031
+   ]
+  },
+  {
+   "text": "12",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 980,
+   "top": 1984,
+   "right": 1039,
+   "bottom": 2060,
+   "center": [
+    1009,
+    2022
+   ]
+  },
+  {
+   "text": "元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 1038,
+   "top": 2008,
+   "right": 1082,
+   "bottom": 2054,
+   "center": [
+    1060,
+    2031
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 816,
+   "top": 2071,
+   "right": 1083,
+   "bottom": 2117,
+   "center": [
+    949,
+    2094
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 846,
+   "top": 2071,
+   "right": 1082,
+   "bottom": 2117,
+   "center": [
+    964,
+    2094
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 846,
+   "top": 2071,
+   "right": 1075,
+   "bottom": 2117,
+   "center": [
+    960,
+    2094
+   ]
+  },
+  {
+   "text": "特惠",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 847,
+   "top": 2071,
+   "right": 930,
+   "bottom": 2117,
+   "center": [
+    888,
+    2094
+   ]
+  },
+  {
+   "text": "已减3元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 930,
+   "top": 2071,
+   "right": 1073,
+   "bottom": 2117,
+   "center": [
+    1001,
+    2094
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1083,
+   "top": 1968,
+   "right": 1200,
+   "bottom": 2135,
+   "center": [
+    1141,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.widget.ImageView",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1109,
+   "top": 2025,
+   "right": 1161,
+   "bottom": 2077,
+   "center": [
+    1135,
+    2051
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "车型:火箭出行 已选 预估 14 元",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2135,
+   "right": 1200,
+   "bottom": 2302,
+   "center": [
+    691,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2135,
+   "right": 1200,
+   "bottom": 2302,
+   "center": [
+    691,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2135,
+   "right": 1200,
+   "bottom": 2302,
+   "center": [
+    691,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2135,
+   "right": 1200,
+   "bottom": 2302,
+   "center": [
+    691,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2135,
+   "right": 312,
+   "bottom": 2302,
+   "center": [
+    247,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 221,
+   "top": 2181,
+   "right": 286,
+   "bottom": 2256,
+   "center": [
+    253,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2135,
+   "right": 1083,
+   "bottom": 2302,
+   "center": [
+    697,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2151,
+   "right": 815,
+   "bottom": 2286,
+   "center": [
+    563,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2160,
+   "right": 497,
+   "bottom": 2223,
+   "center": [
+    404,
+    2191
+   ]
+  },
+  {
+   "text": "火箭出行",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 2160,
+   "right": 497,
+   "bottom": 2223,
+   "center": [
+    404,
+    2191
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2224,
+   "right": 815,
+   "bottom": 2276,
+   "center": [
+    563,
+    2250
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2224,
+   "right": 445,
+   "bottom": 2276,
+   "center": [
+    378,
+    2250
+   ]
+  },
+  {
+   "text": "五星平台",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 2232,
+   "right": 445,
+   "bottom": 2266,
+   "center": [
+    378,
+    2249
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 458,
+   "top": 2224,
+   "right": 591,
+   "bottom": 2276,
+   "center": [
+    524,
+    2250
+   ]
+  },
+  {
+   "text": "敢坐敢赔",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 458,
+   "top": 2232,
+   "right": 591,
+   "bottom": 2266,
+   "center": [
+    524,
+    2249
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 814,
+   "top": 2151,
+   "right": 1082,
+   "bottom": 2286,
+   "center": [
+    948,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 814,
+   "top": 2151,
+   "right": 1082,
+   "bottom": 2227,
+   "center": [
+    948,
+    2189
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 833,
+   "top": 2172,
+   "right": 892,
+   "bottom": 2222,
+   "center": [
+    862,
+    2197
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 833,
+   "top": 2172,
+   "right": 892,
+   "bottom": 2222,
+   "center": [
+    862,
+    2197
+   ]
+  },
+  {
+   "text": "预估",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 901,
+   "top": 2175,
+   "right": 977,
+   "bottom": 2221,
+   "center": [
+    939,
+    2198
+   ]
+  },
+  {
+   "text": "14",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 978,
+   "top": 2151,
+   "right": 1038,
+   "bottom": 2227,
+   "center": [
+    1008,
+    2189
+   ]
+  },
+  {
+   "text": "元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 1038,
+   "top": 2175,
+   "right": 1082,
+   "bottom": 2221,
+   "center": [
+    1060,
+    2198
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 814,
+   "top": 2238,
+   "right": 1082,
+   "bottom": 2284,
+   "center": [
+    948,
+    2261
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 848,
+   "top": 2238,
+   "right": 1082,
+   "bottom": 2284,
+   "center": [
+    965,
+    2261
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 848,
+   "top": 2238,
+   "right": 1076,
+   "bottom": 2284,
+   "center": [
+    962,
+    2261
+   ]
+  },
+  {
+   "text": "特惠",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 849,
+   "top": 2238,
+   "right": 932,
+   "bottom": 2284,
+   "center": [
+    890,
+    2261
+   ]
+  },
+  {
+   "text": "已减2元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 932,
+   "top": 2238,
+   "right": 1073,
+   "bottom": 2284,
+   "center": [
+    1002,
+    2261
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1083,
+   "top": 2135,
+   "right": 1200,
+   "bottom": 2302,
+   "center": [
+    1141,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.widget.ImageView",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1109,
+   "top": 2192,
+   "right": 1161,
+   "bottom": 2244,
+   "center": [
+    1135,
+    2218
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "车型:AA出行 已选 预估 14 元",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2302,
+   "right": 1200,
+   "bottom": 2469,
+   "center": [
+    691,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2302,
+   "right": 1200,
+   "bottom": 2469,
+   "center": [
+    691,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2302,
+   "right": 1200,
+   "bottom": 2469,
+   "center": [
+    691,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2302,
+   "right": 1200,
+   "bottom": 2469,
+   "center": [
+    691,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2302,
+   "right": 312,
+   "bottom": 2469,
+   "center": [
+    247,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 221,
+   "top": 2348,
+   "right": 286,
+   "bottom": 2423,
+   "center": [
+    253,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2302,
+   "right": 1083,
+   "bottom": 2469,
+   "center": [
+    697,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2318,
+   "right": 815,
+   "bottom": 2453,
+   "center": [
+    563,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2327,
+   "right": 473,
+   "bottom": 2390,
+   "center": [
+    392,
+    2358
+   ]
+  },
+  {
+   "text": "AA出行",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 2327,
+   "right": 473,
+   "bottom": 2390,
+   "center": [
+    392,
+    2358
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2391,
+   "right": 815,
+   "bottom": 2443,
+   "center": [
+    563,
+    2417
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2391,
+   "right": 445,
+   "bottom": 2443,
+   "center": [
+    378,
+    2417
+   ]
+  },
+  {
+   "text": "五星平台",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 2399,
+   "right": 445,
+   "bottom": 2433,
+   "center": [
+    378,
+    2416
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 458,
+   "top": 2391,
+   "right": 591,
+   "bottom": 2443,
+   "center": [
+    524,
+    2417
+   ]
+  },
+  {
+   "text": "敢坐敢赔",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 458,
+   "top": 2399,
+   "right": 591,
+   "bottom": 2433,
+   "center": [
+    524,
+    2416
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 814,
+   "top": 2318,
+   "right": 1082,
+   "bottom": 2453,
+   "center": [
+    948,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 814,
+   "top": 2318,
+   "right": 1082,
+   "bottom": 2394,
+   "center": [
+    948,
+    2356
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 833,
+   "top": 2339,
+   "right": 892,
+   "bottom": 2389,
+   "center": [
+    862,
+    2364
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 833,
+   "top": 2339,
+   "right": 892,
+   "bottom": 2389,
+   "center": [
+    862,
+    2364
+   ]
+  },
+  {
+   "text": "预估",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 901,
+   "top": 2342,
+   "right": 977,
+   "bottom": 2388,
+   "center": [
+    939,
+    2365
+   ]
+  },
+  {
+   "text": "14",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 978,
+   "top": 2318,
+   "right": 1038,
+   "bottom": 2394,
+   "center": [
+    1008,
+    2356
+   ]
+  },
+  {
+   "text": "元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 1038,
+   "top": 2342,
+   "right": 1082,
+   "bottom": 2388,
+   "center": [
+    1060,
+    2365
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 814,
+   "top": 2405,
+   "right": 1082,
+   "bottom": 2451,
+   "center": [
+    948,
+    2428
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 854,
+   "top": 2405,
+   "right": 1082,
+   "bottom": 2451,
+   "center": [
+    968,
+    2428
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 854,
+   "top": 2405,
+   "right": 1075,
+   "bottom": 2451,
+   "center": [
+    964,
+    2428
+   ]
+  },
+  {
+   "text": "特惠",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 855,
+   "top": 2405,
+   "right": 938,
+   "bottom": 2451,
+   "center": [
+    896,
+    2428
+   ]
+  },
+  {
+   "text": "已减1元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 938,
+   "top": 2405,
+   "right": 1073,
+   "bottom": 2451,
+   "center": [
+    1005,
+    2428
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1083,
+   "top": 2302,
+   "right": 1200,
+   "bottom": 2469,
+   "center": [
+    1141,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.widget.ImageView",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1109,
+   "top": 2359,
+   "right": 1161,
+   "bottom": 2411,
+   "center": [
+    1135,
+    2385
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "车型:首汽约车 已选 预估 15 元",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2470,
+   "right": 1200,
+   "bottom": 2626,
+   "center": [
+    691,
+    2548
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2470,
+   "right": 1200,
+   "bottom": 2626,
+   "center": [
+    691,
+    2548
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2470,
+   "right": 1200,
+   "bottom": 2626,
+   "center": [
+    691,
+    2548
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2470,
+   "right": 1200,
+   "bottom": 2626,
+   "center": [
+    691,
+    2548
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2470,
+   "right": 312,
+   "bottom": 2626,
+   "center": [
+    247,
+    2548
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 221,
+   "top": 2510,
+   "right": 286,
+   "bottom": 2585,
+   "center": [
+    253,
+    2547
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2470,
+   "right": 1083,
+   "bottom": 2626,
+   "center": [
+    697,
+    2548
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2486,
+   "right": 815,
+   "bottom": 2610,
+   "center": [
+    563,
+    2548
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2490,
+   "right": 497,
+   "bottom": 2553,
+   "center": [
+    404,
+    2521
+   ]
+  },
+  {
+   "text": "首汽约车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 2490,
+   "right": 497,
+   "bottom": 2553,
+   "center": [
+    404,
+    2521
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2553,
+   "right": 815,
+   "bottom": 2605,
+   "center": [
+    563,
+    2579
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2553,
+   "right": 445,
+   "bottom": 2605,
+   "center": [
+    378,
+    2579
+   ]
+  },
+  {
+   "text": "敢坐敢赔",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 2561,
+   "right": 445,
+   "bottom": 2595,
+   "center": [
+    378,
+    2578
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 458,
+   "top": 2553,
+   "right": 591,
+   "bottom": 2605,
+   "center": [
+    524,
+    2579
+   ]
+  },
+  {
+   "text": "隐私保护",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 458,
+   "top": 2561,
+   "right": 591,
+   "bottom": 2595,
+   "center": [
+    524,
+    2578
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 814,
+   "top": 2486,
+   "right": 1082,
+   "bottom": 2610,
+   "center": [
+    948,
+    2548
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 814,
+   "top": 2504,
+   "right": 1082,
+   "bottom": 2580,
+   "center": [
+    948,
+    2542
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 833,
+   "top": 2525,
+   "right": 892,
+   "bottom": 2575,
+   "center": [
+    862,
+    2550
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 833,
+   "top": 2525,
+   "right": 892,
+   "bottom": 2575,
+   "center": [
+    862,
+    2550
+   ]
+  },
+  {
+   "text": "预估",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 901,
+   "top": 2528,
+   "right": 977,
+   "bottom": 2574,
+   "center": [
+    939,
+    2551
+   ]
+  },
+  {
+   "text": "15",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 978,
+   "top": 2504,
+   "right": 1038,
+   "bottom": 2580,
+   "center": [
+    1008,
+    2542
+   ]
+  },
+  {
+   "text": "元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 1038,
+   "top": 2528,
+   "right": 1082,
+   "bottom": 2574,
+   "center": [
+    1060,
+    2551
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1083,
+   "top": 2470,
+   "right": 1200,
+   "bottom": 2626,
+   "center": [
+    1141,
+    2548
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.widget.ImageView",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1109,
+   "top": 2522,
+   "right": 1161,
+   "bottom": 2574,
+   "center": [
+    1135,
+    2548
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "车型:飞嘀打车 已选 预估 15 元",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2626,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    2648
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2626,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    2648
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2626,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    2648
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2626,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    691,
+    2648
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 182,
+   "top": 2626,
+   "right": 312,
+   "bottom": 2670,
+   "center": [
+    247,
+    2648
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2626,
+   "right": 1083,
+   "bottom": 2670,
+   "center": [
+    697,
+    2648
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2642,
+   "right": 815,
+   "bottom": 2670,
+   "center": [
+    563,
+    2656
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 312,
+   "top": 2651,
+   "right": 497,
+   "bottom": 2670,
+   "center": [
+    404,
+    2660
+   ]
+  },
+  {
+   "text": "飞嘀打车",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 312,
+   "top": 2651,
+   "right": 497,
+   "bottom": 2670,
+   "center": [
+    404,
+    2660
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 814,
+   "top": 2642,
+   "right": 1082,
+   "bottom": 2670,
+   "center": [
+    948,
+    2656
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 814,
+   "top": 2642,
+   "right": 1082,
+   "bottom": 2670,
+   "center": [
+    948,
+    2656
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 833,
+   "top": 2663,
+   "right": 892,
+   "bottom": 2670,
+   "center": [
+    862,
+    2666
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 833,
+   "top": 2663,
+   "right": 892,
+   "bottom": 2670,
+   "center": [
+    862,
+    2666
+   ]
+  },
+  {
+   "text": "预估",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 901,
+   "top": 2666,
+   "right": 977,
+   "bottom": 2670,
+   "center": [
+    939,
+    2668
+   ]
+  },
+  {
+   "text": "15",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 978,
+   "top": 2642,
+   "right": 1038,
+   "bottom": 2670,
+   "center": [
+    1008,
+    2656
+   ]
+  },
+  {
+   "text": "元",
+   "content_desc": "",
+   "class": "android.view.View",
+   "resource_id": "",
+   "clickable": false,
+   "checked": "false",
+   "left": 1038,
+   "top": 2666,
+   "right": 1082,
+   "bottom": 2670,
+   "center": [
+    1060,
+    2668
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 1083,
+   "top": 2626,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    1141,
+    2648
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 549,
+   "top": 907,
+   "right": 650,
+   "bottom": 959,
+   "center": [
+    599,
+    933
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 907,
+   "right": 1200,
+   "bottom": 2670,
+   "center": [
+    600,
+    1788
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 0,
+   "top": 0,
+   "right": 1200,
+   "bottom": 140,
+   "center": [
+    600,
+    70
+   ]
+  },
+  {
+   "text": "",
+   "content_desc": "",
+   "class": "android.view.ViewGroup",
+   "resource_id": "",
+   "clickable": true,
+   "checked": "false",
+   "left": 296,
+   "top": 2184,
+   "right": 904,
+   "bottom": 2275,
+   "center": [
+    600,
+    2229
+   ]
+  }
+ ]
+}

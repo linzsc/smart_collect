@@ -16,6 +16,7 @@ S2「识别经济型供应商列表」的平台 handler，供 YAML 计价采集�
 from __future__ import annotations
 
 from collector.platform.gaode.supplier_parse import parse_suppliers_response
+from collector.platform.gaode.ui_tree_supplier import SupplierRow, is_safe_center
 
 # S2 提示词（CAP-11，单屏行级判断，不依赖「栏」跨屏概念）
 _S2_PROMPT = (
@@ -46,6 +47,54 @@ _S2_PROMPT = (
 )
 
 
+
+
+def _log_supplier_coords(engine, suppliers) -> None:
+    """日志输出运力商及对应坐标（仿视觉模式：识别 + 过滤 + 带坐标）。"""
+    if not suppliers:
+        engine._log("  [S2] 本屏无经济型运力商")
+        return
+    for s in suppliers:
+        engine._log(f"    · {s.name} @ ({s.center[0]},{s.center[1]}) 已选={s.selected}")
+
+
+def _identify_from_ui_tree(engine, step: dict) -> tuple[list[str], bool] | None:
+    """UI 树优先识别当前屏经济型运力商（零 LLM）。
+
+    返回 (suppliers, economy_ended)；dump 失败或「经济型·N」标题缺失（header_missing）
+    返回 None，由调用方回退 VLM。
+    """
+    try:
+        from collector.platform.gaode.ui_tree_supplier import (
+            extract_economy_suppliers,
+            nodes_from_xml,
+        )
+        xml = engine.adb.dump_ui_tree()
+        if not xml or not isinstance(xml, str):
+            engine._log("  [S2] UI树 dump 不可用，回退 VLM")
+            return None
+        nodes = nodes_from_xml(xml)
+        res = extract_economy_suppliers(nodes)
+        if res.header_missing:
+            engine._log("  [S2] UI树「经济型」标题缺失(header_missing)，回退 VLM")
+            return None
+
+        engine.stats["ui_tree_dumps"] = engine.stats.get("ui_tree_dumps", 0) + 1
+        _log_supplier_coords(engine, res.suppliers)
+        # 缓存本屏节点与行节点，供后续「?」/勾选框定位（场景 C）
+        engine.state["_ui_tree_nodes"] = nodes
+        engine.state["_supplier_rows"] = {s.name: s.node for s in res.suppliers}
+        engine.state["_economy_total"] = res.total_count
+        engine._log(
+            f"  [S2] UI树识别: {len(res.suppliers)} 个 "
+            f"(total={res.total_count}, ended={res.economy_ended})"
+        )
+        return res.suppliers, res.economy_ended
+    except Exception as e:  # noqa: BLE001 - UI 树路径任何异常都回退 VLM，不中断流程
+        engine._log(f"  [S2] UI树解析异常({e})，回退 VLM")
+        return None
+
+
 def _identify(engine, step: dict) -> tuple[list[str], bool]:
     """识别当前屏「经济型」栏供应商 → (suppliers, economy_ended)。"""
     shot = engine._screenshot(step.get("id", "s2_suppliers"))
@@ -57,31 +106,44 @@ def _identify(engine, step: dict) -> tuple[list[str], bool]:
 
 
 def handle_s2_list_suppliers(engine, step: dict) -> None:
-    """extract_list handler：识别当前屏经济型供应商并写入 engine.state（CAP-11）。
+    """extract_list handler：识别当前屏经济型供应商并写入 engine.state（UI 树优先）。
 
-    - 只做「截图 → VLM 识别 → 过滤 → 日志 → 写 state」；
-    - 下滑由 YAML 循环步骤 s4_scroll 负责（本轮无新供应商时触发，≤1/3 屏）；
-    - 不在此标记已处理（由 mark_supplier_processed 采集完成后标记，避免漏采）。
-    日志覆盖三块：屏上实际有哪些（VLM 原始行）/ 识别到了哪些（过滤后）/ 还有哪些未采集。
+    - UI 树优先（零 LLM），失败/标题缺失回退 VLM；
+    - 过滤：的士/出租/平台产品（is_skipped_supplier）+ 已采集 + 20% 余量；
+    - 下滑由 YAML 循环步骤 s4_scroll 负责（本轮无可采时触发）。
+    写 state：suppliers(本轮可采) / round_had_suppliers / economy_ended / _edge_suppliers(边缘行)。
     """
     processed = engine.state.setdefault("_processed", set())
-    suppliers, economy_ended = _identify(engine, step)   # suppliers 已按 _SKIP_KEYWORDS 过滤
+    ui_result = _identify_from_ui_tree(engine, step)
+    if ui_result is not None:
+        rows, economy_ended = ui_result
+    else:
+        names, economy_ended = _identify(engine, step)
+        rows = [SupplierRow(name=n, selected=None, detail="", center=(-1, -1), node={})
+                for n in names]
 
-    new_suppliers = [s for s in suppliers if s not in processed]
-    already = [s for s in suppliers if s in processed]
+    screen_h = engine._screen_size[1] if engine._screen_size else 0
+    new_names: list[str] = []
+    edge_names: list[str] = []
+    for r in rows:
+        if r.name in processed:
+            continue
+        if r.center[0] >= 0 and not is_safe_center(r.center[1], screen_h):
+            edge_names.append(r.name)      # 贴边行：本轮不采，滚动到中间再采
+        else:
+            new_names.append(r.name)
 
-    # 日志：屏上有哪些（过滤后）/ 已采过 / 本轮新（未采集）
-    engine._log(f"  [S2] 屏上识别到(已过滤): {len(suppliers)} 个 -> {suppliers}")
-    if already:
-        engine._log(f"  [S2] 已采集过(跳过): {already}")
-    engine._log(f"  [S2] 本轮新运力商(未采集): {new_suppliers}")
+    engine.state["suppliers"] = new_names
+    engine.state["round_had_suppliers"] = bool(new_names)
+    engine.state["economy_ended"] = economy_ended
+    engine.state["_edge_suppliers"] = edge_names
+
+    engine._log(f"  [S2] 本轮可采(未采集+余量OK): {new_names or '(无)'}")
+    if edge_names:
+        engine._log(f"  [S2] 边缘行(待滚动后采): {edge_names}")
     engine._log(f"  [S2] 已采集 {len(processed)} 个: {sorted(processed)}")
     if economy_ended:
-        engine._log(f"  [S2] 经济型已结束(出现特快车/出租车/优享型等标题)，本轮新 {len(new_suppliers)} 个")
-
-    engine.state["suppliers"] = new_suppliers
-    engine.state["round_had_suppliers"] = bool(new_suppliers)
-    engine.state["economy_ended"] = economy_ended
+        engine._log("  [S2] 经济型已结束(出现特快车/出租车/优享型等标题)")
 
 
 def handle_mark_supplier_processed(engine, step: dict) -> None:
@@ -112,8 +174,10 @@ def handle_pricing_loop_done(engine, step: dict) -> bool:
     if collected >= target:
         engine._log(f"  [S2] 循环终止: 已采集 {collected}/{target}")
         return True
-    economy_done = bool(st.get("economy_ended")) and not bool(st.get("round_had_suppliers"))
-    scroll_cap = int(st.get("scroll_count", 0)) >= _MAX_SCROLLS and not bool(st.get("round_had_suppliers"))
+    no_left = (not bool(st.get("round_had_suppliers"))
+               and not bool(st.get("_edge_suppliers")))
+    economy_done = bool(st.get("economy_ended")) and no_left
+    scroll_cap = int(st.get("scroll_count", 0)) >= _MAX_SCROLLS and no_left
     done = economy_done or scroll_cap
     engine._log(f"  [S2] 循环终止判定: collected={collected}/{target} economy_done={economy_done} "
                 f"scroll_cap={scroll_cap} -> {done}")
