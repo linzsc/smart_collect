@@ -47,6 +47,7 @@ _PRICE_RE = __import__("re").compile(r"\d+(\.\d+)?")
 class FareRow:
     period: str
     price: str
+    city: str = ""      # 跨城费的城市分组（如「北京市 至 天津市」）
 
 
 @dataclass
@@ -62,6 +63,7 @@ class FareDetail:
     mode: str = "实时用车"
     sections: list[FareSection] = field(default_factory=list)
     stopped_at_yuyue: bool = False
+    yuyue_y: int | None = None   # 「预约用车」标题 y（用于"距底部余量"停止判定）
     collapsed_skipped: int = 0
 
 
@@ -76,6 +78,7 @@ def parse_fare_detail_nodes(nodes: list[dict], supplier: str = "", tab: str = ""
 
     fd = FareDetail(supplier=supplier, tab=tab)
     current: FareSection | None = None
+    current_city = ""
 
     for key in sorted(groups):
         ns = sorted(groups[key], key=lambda n: n["center"][0])
@@ -89,6 +92,7 @@ def parse_fare_detail_nodes(nodes: list[dict], supplier: str = "", tab: str = ""
             t = ns[0]["text"]
             if _HEADER_X_MIN <= x <= _HEADER_X_MAX and t in _SECTION_TITLES:
                 current = FareSection(title=t)
+                current_city = ""
                 fd.sections.append(current)
                 continue
             if _HEADER_X_MIN <= x <= _HEADER_X_MAX and t == "实时用车":
@@ -96,16 +100,26 @@ def parse_fare_detail_nodes(nodes: list[dict], supplier: str = "", tab: str = ""
                 continue
             if _HEADER_X_MIN <= x <= _HEADER_X_MAX and t == "预约用车":
                 fd.stopped_at_yuyue = True    # 只取预约用车之上
+                fd.yuyue_y = ns[0]["center"][1]
                 break
 
-        # ── 数据行：左标签 | 右价格 ──
+        # ── 跨城费城市行：单节点、含「至」（如「北京市 至 天津市」）──
+        if (current is not None and current.title == "跨城费"
+                and len(ns) == 1 and "至" in ns[0]["text"]):
+            current_city = ns[0]["text"].strip()
+            continue
+
+        # ── 数据行：左标签 | 右价格（跨城费行带 city）──
         if current is not None and len(ns) == 2:
             left, right = ns[0], ns[1]
             if left["center"][0] < _LEFT_X_MAX and right["center"][0] > _RIGHT_X_MIN:
                 period = left["text"].strip()
                 price = right["text"].strip()
                 if period and price:
-                    current.rows.append(FareRow(period=period, price=price))
+                    current.rows.append(FareRow(
+                        period=period, price=price,
+                        city=current_city if current.title == "跨城费" else "",
+                    ))
 
     return fd
 
@@ -120,24 +134,32 @@ def merge_fare_detail(target: FareDetail, new: FareDetail) -> int:
             added += len(sec.rows)
             continue
         for row in sec.rows:
-            if not any(r.period == row.period for r in t.rows):
+            if not any(r.period == row.period and r.city == row.city for r in t.rows):
                 t.rows.append(row)
                 added += 1
     if new.stopped_at_yuyue:
         target.stopped_at_yuyue = True
+        if new.yuyue_y is not None and (target.yuyue_y is None or new.yuyue_y < target.yuyue_y):
+            target.yuyue_y = new.yuyue_y
     return added
 
 
 def fare_detail_to_dict(fd: FareDetail) -> dict[str, Any]:
+    sections: dict[str, Any] = {}
+    for s in fd.sections:
+        if s.title == "跨城费":
+            cities: dict[str, list[dict[str, str]]] = {}
+            for r in s.rows:
+                cities.setdefault(r.city, []).append({"period": r.period, "price": r.price})
+            sections[s.title] = cities
+        else:
+            sections[s.title] = [{"period": r.period, "price": r.price} for r in s.rows]
     return {
         "supplier": fd.supplier,
         "tab": fd.tab,
         "mode": fd.mode,
         "stopped_at_yuyue": fd.stopped_at_yuyue,
-        "sections": {
-            s.title: [{"period": r.period, "price": r.price} for r in s.rows]
-            for s in fd.sections
-        },
+        "sections": sections,
     }
 
 

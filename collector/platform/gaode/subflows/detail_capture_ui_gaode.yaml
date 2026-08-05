@@ -44,17 +44,18 @@ steps:
     item: "tab"
     steps:
       - id: "tab_{{.S.tab}}"
-        type: "ocr_click"
-        description: "OCR 识别「{{.S.tab}}」标签页并点击（进页导航，零 LLM）"
-        text: "{{.S.tab}}"
-        cache_key: "tab_{{.S.tab}}"
+        type: "ui_tree_click"
+        description: "UI 树定位「{{.S.tab}}」标签并点击（零 OCR 零 LLM）"
+        ui_target: "tab"
+        tab: "{{.S.tab}}"
         wait_after: 0.5
 
       - id: "fare_ui_{{.S.tab}}"
         type: "fare_detail_ui"
         description: "UI 树提取「{{.S.tab}}」计价规则（dump→下滑→拼接→写 JSON）"
-        max_rounds: 12
+        max_rounds: 8
         scroll_wait: 0.6
+        initial_wait: 1.0
 
   # ── 返回 ×2：详细计价页 → 计价弹窗 → 打车页（PERF-02 确定性返回）──
   - id: "exit_detail"

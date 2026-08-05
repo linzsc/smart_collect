@@ -148,7 +148,7 @@ def handle_fare_detail_ui(engine, step: dict) -> None:
         parse_fare_detail_nodes,
         write_fare_detail_json,
     )
-    from collector.platform.gaode.ui_tree_supplier import nodes_from_xml
+    from collector.platform.gaode.ui_tree_supplier import is_safe_center, nodes_from_xml
 
     supplier = str(engine.state.get("supplier", "")).strip()
     tab = str(engine.state.get("tab", "")).strip()
@@ -160,6 +160,13 @@ def handle_fare_detail_ui(engine, step: dict) -> None:
     sh = engine._screen_size[1] if engine._screen_size else 2670
     no_add_streak = 0
     down_scrolls = 0
+    # 预约用车距底部余量（放开：默认 10%，即 y <= 0.9H 就停，减少冗余滑动）
+    yuyue_margin = float(step.get("yuyue_margin", 0.1))
+
+    # 页面可能还在渲染（WebView）：首 dump 前先等稳定
+    initial_wait = float(step.get("initial_wait", 1.0))
+    if initial_wait > 0:
+        engine._wait(initial_wait, "fare_initial_wait")
 
     for rnd in range(max_rounds):
         xml = engine.adb.dump_ui_tree()
@@ -168,31 +175,56 @@ def handle_fare_detail_ui(engine, step: dict) -> None:
             break
         nodes = nodes_from_xml(xml)
         fd = parse_fare_detail_nodes(nodes, supplier, tab)
+        # 首轮页面未渲染完（无任何文字节点）→ 等待重试，不计入无新增、不滑动
+        if rnd == 0 and not any(n.get("text") for n in nodes):
+            engine._log("  [计价UI] 页面未渲染完（无文字节点），等待 1s 重试")
+            engine._wait(1.0, "fare_render_wait")
+            continue
         added = merge_fare_detail(merged, fd)
         engine._log(
             f"  [计价UI] 第{rnd+1}轮 dump: 段{len(fd.sections)} "
             f"坍塌跳过{fd.collapsed_skipped} 新增{added}行"
         )
         if fd.stopped_at_yuyue:
-            engine._log("  [计价UI] 已到「预约用车」，停止（只取其上）")
-            break
-        if added == 0:
-            no_add_streak += 1
-            if no_add_streak >= 2:
-                engine._log("  [计价UI] 连续 2 轮无新增，停止")
+            if fd.yuyue_y is not None and fd.yuyue_y <= (1 - yuyue_margin) * sh:
+                engine._log(f"  [计价UI] 「预约用车」已离开底部余量(y={fd.yuyue_y})，停止（只取其上）")
                 break
-        else:
+            engine._log(f"  [计价UI] 「预约用车」在底部余量内(y={fd.yuyue_y})，继续下滑采全其上")
             no_add_streak = 0
-        # 下滑一屏再 dump（把 WebView 坍塌区滚入可见区，获得正确坐标）
-        engine.adb.slide(sw // 2, int(sh * 0.6), sw // 2, int(sh * 0.4), 500)
+        else:
+            if added == 0:
+                no_add_streak += 1
+                if no_add_streak >= 2:
+                    engine._log("  [计价UI] 连续 2 轮无新增，停止")
+                    break
+            else:
+                no_add_streak = 0
+        # 下滑一屏再 dump（滑动距离 0.3 屏 = 0.65→0.35，比原 0.2 屏多 50%）
+        engine.adb.slide(sw // 2, int(sh * 0.65), sw // 2, int(sh * 0.35), 500)
         engine._wait(step.get("scroll_wait", 0.6), "fare_scroll")
         down_scrolls += 1
 
-    # 回到顶部：仿原 scroll_until_visible 的 scroll_back_to_top（否则下一轮切 tab 时 tab 在屏外）
+    # 回到顶部：先按下滑次数推导上滑次数（每个上滑 ≈2.5 个下滑），再 dump 确认
+    #   ⚠ 不依赖"第一次 dump 见 tab 就停"——WebView 坍塌/固定节点会假阳性，导致一屏不上滑
     if down_scrolls:
-        up_swipes = min(8, max(3, (down_scrolls + 1) // 2 + 1))
+        up_swipes = min(8, max(2, (down_scrolls + 1) // 2 + 1))
         engine._log(f"  [计价UI] 回滚到顶部（下滑 {down_scrolls} 次 → 上滑 {up_swipes} 次）")
         for _ in range(up_swipes):
+            engine.adb.slide(sw // 2, int(sh * 0.25), sw // 2, int(sh * 0.75), 200)
+            engine._wait(0.2, "fare_scroll_top")
+        # 确认：tab 未回到安全区则补滑（上限兜底）
+        max_confirm = int(step.get("max_confirm_swipes", 4))
+        for _ in range(max_confirm):
+            xml = engine.adb.dump_ui_tree()
+            if not xml or not isinstance(xml, str):
+                break
+            tab_visible = any(
+                n.get("text") in ("工作日", "休息日") and n["center"][1] < sh * 0.5
+                for n in nodes_from_xml(xml)
+            )
+            if tab_visible:
+                engine._log("  [计价UI] 已回顶（tab 可见）")
+                break
             engine.adb.slide(sw // 2, int(sh * 0.25), sw // 2, int(sh * 0.75), 200)
             engine._wait(0.2, "fare_scroll_top")
 
@@ -232,6 +264,33 @@ def handle_ui_tree_click(engine, step: dict) -> bool:
         nodes_from_xml,
         parse_supplier_desc,
     )
+
+    if target == "tab":
+        # tab 字段可能是运行时模板（{{.S.tab}}）→ 渲染后再匹配
+        raw_tab = str(step.get("tab") or engine.state.get("tab", "")).strip()
+        tab_name = engine._render(raw_tab).strip() if hasattr(engine, "_render") else raw_tab
+        # 始终重新 dump（缓存节点可能是冒泡页/滚动前的）+ 重试等 WebView 无障碍树渲染
+        node = None
+        max_try = int(step.get("tab_max_try", 3))
+        for attempt in range(max_try):
+            xml = engine.adb.dump_ui_tree()
+            if xml and isinstance(xml, str):
+                nodes = nodes_from_xml(xml)
+                engine.state["_ui_tree_nodes"] = nodes
+                node = next((n for n in nodes if n.get("text") == tab_name), None)
+                if node is not None:
+                    break
+            if attempt < max_try - 1:
+                engine._log(f"  [UI树点击] tab「{tab_name}」未就绪，1s 后重试（{attempt + 1}/{max_try}）")
+                engine._wait(1.0, "ui_tab_retry")
+        if node is None:
+            engine._log(f"  [UI树点击] 未找到「{tab_name}」tab（重试 {max_try} 次），回退 VLM")
+            return False
+        cx, cy = node["center"]
+        engine._log(f"  [UI树点击] tab「{tab_name}」@ ({cx},{cy})")
+        engine.adb.click(cx, cy)
+        engine._wait(step.get("wait_after", 0.5), "ui_tab_wait")
+        return True
 
     if target == "rail_economy":
         node = locate_rail_category(nodes, "经济")

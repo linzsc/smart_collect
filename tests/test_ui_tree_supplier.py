@@ -187,6 +187,13 @@ class FakeEngine:
     def _wait(self, seconds: float, tag: str = "") -> None:
         pass
 
+    def _render(self, text: str) -> str:
+        """简化 {{.S.<key>}} 运行时模板渲染（真实实现在 FlowEngine）。"""
+        import re
+        def _rep(m):
+            return str(self.state.get(m.group(1), m.group(0)))
+        return re.sub(r"\{\{\.S\.(\w+)\}\}", _rep, text)
+
     @property
     def _screen_size(self):
         return (1200, self.screen_h)
@@ -410,6 +417,55 @@ def test_handle_ui_tree_click_q_ensure_selected():
     second, _ = engine.adb.click.call_args_list[1]
     assert first[0] >= 1100                          # 勾选框（右侧）
     assert second[0] == 864                          # 问号
+
+
+
+def _tab_nodes():
+    return [
+        {"text": "工作日", "content_desc": "", "class": "", "resource_id": "",
+         "clickable": False, "checked": "false",
+         "left": 111, "top": 660, "right": 171, "bottom": 700, "center": [141, 680]},
+        {"text": "休息日", "content_desc": "", "class": "", "resource_id": "",
+         "clickable": False, "checked": "false",
+         "left": 392, "top": 660, "right": 452, "bottom": 700, "center": [422, 680]},
+    ]
+
+
+def test_handle_ui_tree_click_tab():
+    from collector.platform.gaode.platform import handle_ui_tree_click
+    engine = _fake_engine_with_nodes(None)
+    engine.adb.dump_ui_tree.return_value = "<h/>"
+    with patch("collector.platform.gaode.ui_tree_supplier.nodes_from_xml",
+               return_value=_tab_nodes()):
+        ok = handle_ui_tree_click(engine, {"ui_target": "tab", "tab": "休息日", "wait_after": 0})
+    assert ok is True
+    engine.adb.click.assert_called_once_with(422, 680)
+
+
+def test_handle_ui_tree_click_tab_template_rendered():
+    """tab 字段带运行时模板 {{.S.tab}} 时应先渲染再匹配（真实 YAML 场景）。"""
+    from collector.platform.gaode.platform import handle_ui_tree_click
+    engine = _fake_engine_with_nodes(None)
+    engine.state["tab"] = "休息日"
+    engine.adb.dump_ui_tree.return_value = "<h/>"
+    with patch("collector.platform.gaode.ui_tree_supplier.nodes_from_xml",
+               return_value=_tab_nodes()):
+        ok = handle_ui_tree_click(engine, {"ui_target": "tab", "tab": "{{.S.tab}}", "wait_after": 0})
+    assert ok is True
+    engine.adb.click.assert_called_once_with(422, 680)
+
+
+def test_handle_ui_tree_click_tab_retry_until_rendered():
+    """WebView 无障碍树未渲染：第一次 dump 无 tab → 等 1s 重试 → 第二次有 tab → 点。"""
+    from collector.platform.gaode.platform import handle_ui_tree_click
+    engine = _fake_engine_with_nodes(None)
+    engine.adb.dump_ui_tree.side_effect = ["<h/>", "<h/>"]
+    with patch("collector.platform.gaode.ui_tree_supplier.nodes_from_xml",
+               side_effect=[[], _tab_nodes()]):
+        ok = handle_ui_tree_click(engine, {"ui_target": "tab", "tab": "工作日", "wait_after": 0})
+    assert ok is True
+    assert engine.adb.dump_ui_tree.call_count == 2   # 重试过一次
+    engine.adb.click.assert_called_once_with(141, 680)
 
 
 # ---------------------------------------------------------------------------

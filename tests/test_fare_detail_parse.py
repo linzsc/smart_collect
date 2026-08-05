@@ -89,6 +89,7 @@ def test_parse_stops_at_yuyue():
     ]
     fd = parse_fare_detail_nodes(nodes)
     assert fd.stopped_at_yuyue is True
+    assert fd.yuyue_y == 400
     assert len(fd.sections) == 1 and fd.sections[0].title == "起步价"
     assert len(fd.sections[0].rows) == 1
 
@@ -151,25 +152,78 @@ class FareFakeEngine:
         return self.screen_size
 
 
+def _tab_nodes():
+    """含「工作日/休息日」tab 的节点（回滚到顶部的判定信号）。"""
+    return [_mk_node("工作日", 141, 680), _mk_node("休息日", 422, 680)]
+
+
 def test_handler_fare_detail_ui():
     from collector.platform.gaode.platform import handle_fare_detail_ui
     with tempfile.TemporaryDirectory() as tmp:
         engine = FareFakeEngine()
         engine.output_dir = str(Path(tmp) / "out")
         nodes = _fixture(_WEEKDAY)
-        # 3 次 dump：有数据 → 无新增 → 无新增（连续2轮无新增停止）
-        engine.adb.dump_ui_tree.side_effect = ["<h/>", "<h/>", "<h/>"]
+        # 3 次提取 dump：有数据 → 无新增 → 无新增（连续2轮无新增停止）
+        # + 1 次确认 dump：见 tab → 确认回顶
+        engine.adb.dump_ui_tree.side_effect = ["<h/>"] * 4
         with patch("collector.platform.gaode.ui_tree_supplier.nodes_from_xml",
-                   side_effect=[nodes, [], []]):
+                   side_effect=[nodes, [], [], _tab_nodes()]):
             handle_fare_detail_ui(engine, {"max_rounds": 12, "scroll_wait": 0})
-        # 下滑 2 次（第1轮有新增滑1次；第2轮无新增 streak1 滑1次；第3轮 streak2 停）
-        # + 回滚顶部 3 次（down_scrolls=2 → (2+1)//2+1=2 → max(3)=3）
-        assert engine.adb.slide.call_count == 5, engine.adb.slide.call_count
+        # 下滑 2 次 + 上滑 2 次（down=2 → (2+1)//2+1=2，先按次数回滚）+ 确认 0 次补滑
+        assert engine.adb.slide.call_count == 4, engine.adb.slide.call_count
         out = Path(tmp) / "result" / "工作日" / "火箭出行" / "fare_detail.json"
         assert out.exists(), engine._logs
         data = json.loads(out.read_text(encoding="utf-8"))
         assert set(data["sections"]) == {"起步价", "里程费"}
         assert len(data["sections"]["起步价"]) == 8
+
+
+def test_handler_yuyue_needs_bottom_margin():
+    """预约用车刚露头（距底部<20%）→ 继续下滑；进入安全区 → 停止。"""
+    from collector.platform.gaode.platform import handle_fare_detail_ui
+    bottom = [
+        _mk_node("实时用车", 599, 100),
+        _mk_node("起步价", 599, 200),
+        _mk_node("普通时段", 300, 300), _mk_node("14.58元", 1000, 300),
+        _mk_node("预约用车", 599, 2536),              # 0.95H → 底部余量(0.1)内，继续滑
+    ]
+    safe = [
+        _mk_node("实时用车", 599, 100),
+        _mk_node("起步价", 599, 200),
+        _mk_node("普通时段", 300, 300), _mk_node("14.58元", 1000, 300),
+        _mk_node("里程费", 599, 400),
+        _mk_node("普通时段", 300, 500), _mk_node("1.30元/公里", 1000, 500),
+        _mk_node("预约用车", 599, 1300),              # 0.49H → 安全区，停
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        engine = FareFakeEngine()
+        engine.output_dir = str(Path(tmp) / "out")
+        engine.adb.dump_ui_tree.side_effect = ["<h/>"] * 3
+        with patch("collector.platform.gaode.ui_tree_supplier.nodes_from_xml",
+                   side_effect=[bottom, safe, _tab_nodes()]):
+            handle_fare_detail_ui(engine, {"max_rounds": 12, "scroll_wait": 0})
+        # 下滑 1 次（第1轮预约用车在底部→滑；第2轮安全→停）+ 按次数上滑 2 次 = 3
+        assert engine.adb.slide.call_count == 3, engine.adb.slide.call_count
+        out = Path(tmp) / "result" / "工作日" / "火箭出行" / "fare_detail.json"
+        data = json.loads(out.read_text(encoding="utf-8"))
+        assert set(data["sections"]) == {"起步价", "里程费"}
+        assert data["stopped_at_yuyue"] is True
+
+
+def test_handler_up_scroll_adaptive():
+    """回滚顶部：第一次 dump 无 tab → 上滑一次；再 dump 见 tab → 停。"""
+    from collector.platform.gaode.platform import handle_fare_detail_ui
+    nodes = _fixture(_WEEKDAY)
+    with tempfile.TemporaryDirectory() as tmp:
+        engine = FareFakeEngine()
+        engine.output_dir = str(Path(tmp) / "out")
+        # 提取 3 次 + 确认回滚 2 次（第1次无tab→补滑，第2次见tab→停）
+        engine.adb.dump_ui_tree.side_effect = ["<h/>"] * 5
+        with patch("collector.platform.gaode.ui_tree_supplier.nodes_from_xml",
+                   side_effect=[nodes, [], [], [], _tab_nodes()]):
+            handle_fare_detail_ui(engine, {"max_rounds": 12, "scroll_wait": 0})
+        # 下滑 2 次 + 按次数上滑 2 次 + 确认补滑 1 次 = 5
+        assert engine.adb.slide.call_count == 5, engine.adb.slide.call_count
 
 
 def test_handler_fare_detail_ui_dump_fail_writes_empty():
@@ -182,6 +236,49 @@ def test_handler_fare_detail_ui_dump_fail_writes_empty():
         out = Path(tmp) / "result" / "工作日" / "火箭出行" / "fare_detail.json"
         assert out.exists()
         assert json.loads(out.read_text(encoding="utf-8"))["sections"] == {}
+
+
+
+
+def test_handler_empty_first_dump_retries():
+    """首轮页面未渲染（无文字节点）→ 等待重试，不滑动；第二轮才有数据。"""
+    from collector.platform.gaode.platform import handle_fare_detail_ui
+    nodes = _fixture(_WEEKDAY)
+    with tempfile.TemporaryDirectory() as tmp:
+        engine = FareFakeEngine()
+        engine.output_dir = str(Path(tmp) / "out")
+        # 空 dump → 数据 → 无新增 → 无新增 → 确认回顶(tab)
+        engine.adb.dump_ui_tree.side_effect = ["<h/>"] * 5
+        with patch("collector.platform.gaode.ui_tree_supplier.nodes_from_xml",
+                   side_effect=[[], nodes, [], [], _tab_nodes()]):
+            handle_fare_detail_ui(engine, {"max_rounds": 12, "scroll_wait": 0, "initial_wait": 0})
+        # 空 dump 不滑动；数据轮滑 1 次；无新增轮滑 1 次；streak2 停 → 下滑 2 次 + 上滑 2 次
+        assert engine.adb.slide.call_count == 4, engine.adb.slide.call_count
+        out = Path(tmp) / "result" / "工作日" / "火箭出行" / "fare_detail.json"
+        data = json.loads(out.read_text(encoding="utf-8"))
+        assert set(data["sections"]) == {"起步价", "里程费"}
+
+def test_parse_cross_city_nested():
+    """跨城费：跨城费 → 城市 → (里程段, 价格) 三级结构。"""
+    nodes = [
+        _mk_node("实时用车", 599, 100),
+        _mk_node("跨城费", 599, 200),
+        _mk_node("北京市 至 天津市", 233, 300),
+        _mk_node("40.0 - 60.0km", 209, 400), _mk_node("10.00元", 1067, 400),
+        _mk_node("60.0 - 85.0km", 209, 500), _mk_node("20.00元", 1067, 500),
+        _mk_node("北京市 至 保定市", 233, 600),
+        _mk_node("25.0 - 35.0km", 207, 700), _mk_node("5.00元", 1067, 700),
+    ]
+    fd = parse_fare_detail_nodes(nodes)
+    d = fare_detail_to_dict(fd)
+    cc = d["sections"]["跨城费"]
+    assert cc == {
+        "北京市 至 天津市": [
+            {"period": "40.0 - 60.0km", "price": "10.00元"},
+            {"period": "60.0 - 85.0km", "price": "20.00元"},
+        ],
+        "北京市 至 保定市": [{"period": "25.0 - 35.0km", "price": "5.00元"}],
+    }, cc
 
 
 # ---------------------------------------------------------------------------
