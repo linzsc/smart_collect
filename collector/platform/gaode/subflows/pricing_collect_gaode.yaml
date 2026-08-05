@@ -87,7 +87,7 @@ steps:
         description: "当前屏无新运力商时小幅下滑看下一段"
         direction: "down"
         from_y: 0.6
-        to_y: 0.3
+        to_y: 0.4
         duration_ms: 500
         after_wait: 1.0
         if_state:
