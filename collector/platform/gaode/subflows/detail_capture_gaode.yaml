@@ -23,15 +23,14 @@ steps:
     description: "等待计价弹窗稳定"
     seconds: 1.2
 
-  # ── S3c: 点击「查看详细计价规则」──
+  # ── S3c: OCR 识别「查看详细计价规则」并点击（零 LLM，不调 VLM）──
   - id: "detail_btn"
-    type: "ground_click"
-    description: "点击「查看详细计价规则」"
+    type: "ocr_click"
+    description: "OCR 识别「查看详细计价规则」并点击"
     optional: true
-    ground:
-      element_desc: "高德打车计价弹窗。找「查看详细计价规则」或「计价规则」入口（弹窗中下部的文字链接/按钮）。返回 bbox 和中心坐标。"
-      retry_alt_descs:
-        - "计价弹窗中的「查看详细计价规则」文字链接"
+    text: "查看详细计价规则"
+    max_retries: 2
+    retry_wait: 1.0
     wait_after: 1.5
 
   # ── 工作日 / 休息日：切换标签并滚动采集 ──
@@ -42,20 +41,17 @@ steps:
     item: "tab"
     steps:
       - id: "tab_{{.S.tab}}"
-        type: "ground_click"
-        description: "点击「{{.S.tab}}」标签页"
+        type: "ocr_click"
+        description: "OCR 识别「{{.S.tab}}」标签页并点击（零 LLM）"
+        text: "{{.S.tab}}"
         cache_key: "tab_{{.S.tab}}"
-        ground:
-          element_desc: "计价规则详情页。找「{{.S.tab}}」标签页（与另一标签并列）。返回 bbox 和中心坐标。"
-          retry_alt_descs:
-            - "详情页顶部「{{.S.tab}}」标签"
         wait_after: 0.5
 
       - id: "scroll_{{.S.tab}}"
         type: "scroll_until_visible"
         description: "「{{.S.tab}}」下滑至出现「预约用车」或页面无变化"
         target_text: "预约用车"
-        target_prompt: "这是高德打车「详细计价规则」页面截图。请判断页面上是否出现了蓝色文字「预约用车」。只输出 YES 或 NO。"
+        ocr_only: true
         ocr_first: true
         max_swipes: 12
         frame_suffix: "{{.S.supplier}}"

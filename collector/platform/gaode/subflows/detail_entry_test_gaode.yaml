@@ -17,13 +17,12 @@ steps:
     wait_after: 1.2
 
   - id: "detail_btn_{{.S.supplier}}"
-    type: "ground_click"
-    description: "点「查看详细计价规则」进入计价页（测试用）"
+    type: "ocr_click"
+    description: "OCR 识别「查看详细计价规则」进入计价页（测试用，零 LLM）"
     optional: true
-    ground:
-      element_desc: "高德打车计价弹窗。找「查看详细计价规则」或「计价规则」入口（弹窗中下部的文字链接/按钮）。返回 bbox 和中心坐标。"
-      retry_alt_descs:
-        - "计价弹窗中的「查看详细计价规则」文字链接"
+    text: "查看详细计价规则"
+    max_retries: 2
+    retry_wait: 1.0
     wait_after: 1.5
 
   - id: "detail_shot_{{.S.supplier}}"

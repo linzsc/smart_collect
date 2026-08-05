@@ -175,6 +175,8 @@ class FlowEngine:
                     self._do_open_app(step)
                 elif step_type == "ground_click":
                     self._do_ground_click(step)
+                elif step_type == "ocr_click":
+                    self._do_ocr_click(step)
                 elif step_type == "ground_doublecheck":
                     self._do_ground_doublecheck(step)
                 elif step_type == "scroll_until_visible":
@@ -232,6 +234,69 @@ class FlowEngine:
         self._wait(self.timing.get("app_launch_wait", 3.0), "app_launch_wait")
         if self.debug_mode:
             self._screenshot(f"{step.get('id', 'open_app')}_after")
+
+    def _do_ocr_click(self, step: dict) -> None:
+        """OCR 定位文字并点击（零 LLM）：截图 → 本地 OCR 找文本块 → 点中心。
+
+        选项：
+          - text: 目标文字（默认子串匹配，如「查看详细计价规则」）
+          - match: "contains"(默认) / "exact"
+          - max_retries: OCR 未命中重试次数（默认 2）；retry_wait 重试间隔
+          - wait_after: 点击后等待秒
+          - cache_key: 命中后缓存中心坐标，下次直接复用（如「工作日/休息日」标签）
+        OCR 未配置或未命中 → 抛 StepFailed（详情页零 LLM 原则，不做 VLM 兜底）。
+        """
+        target = self._render(step.get("text", ""))
+        match_mode = step.get("match", "contains")
+        cache_key = self._render(step.get("cache_key")) if step.get("cache_key") else None
+        max_retries = int(step.get("max_retries", 2))
+        retry_wait = float(step.get("retry_wait", 1.0))
+        wait_after = float(step.get("wait_after", 1.0))
+        step_id = self._render(step.get("id", "ocr_click"))
+
+        if cache_key and cache_key in self.state:
+            cached = self.state[cache_key]
+            self._log(f"  ✓ OCR 命中缓存 {cache_key} → 点击 {cached}")
+            self.adb.click(*cached)
+            self._wait(wait_after, "after_ocr_click")
+            return
+
+        if self.ctx.ocr is None:
+            raise StepFailed(f"ocr_click: 未配置 OCR，无法定位「{target}」")
+
+        for attempt in range(1 + max_retries):
+            shot = self._screenshot(f"{step_id}_ocr")
+            self.ctx.incr_ocr_calls()
+            res = self.ctx.ocr.extract(shot)
+            if not res.success:
+                self.ctx.incr_ocr_failures()
+                self._log(f"  [{attempt}] OCR 调用失败: {res.reason}")
+            block = self._find_text_block(res, target, match_mode)
+            if block is not None and block.bbox:
+                cx, cy = (block.bbox[0] + block.bbox[2]) // 2, (block.bbox[1] + block.bbox[3]) // 2
+                self._log(f"  ✓ OCR「{target}」@ {block.bbox} → 点击 ({cx},{cy})")
+                if cache_key:
+                    self.state[cache_key] = [cx, cy]
+                self.adb.click(cx, cy)
+                self._wait(wait_after, "after_ocr_click")
+                return
+            self._log(f"  [{attempt}] OCR「{target}」未命中"
+                      + (f"（缓存 {cache_key} 未命中）" if cache_key else ""))
+            if attempt < max_retries:
+                self._wait(retry_wait, "ocr_retry")
+        raise StepFailed(f"ocr_click: OCR 未找到「{target}」")
+
+    @staticmethod
+    def _find_text_block(res, target: str, match_mode: str = "contains"):
+        """在 OCR 结果中找目标文本块（contains/exact）。"""
+        for b in res.blocks:
+            if match_mode == "exact":
+                if (b.text or "").strip() == target:
+                    return b
+            else:
+                if target in (b.text or ""):
+                    return b
+        return None
 
     def _do_ground_click(self, step: dict) -> None:
         # ── 坐标缓存（PERF-03 语义）：cache_key 命中直接点击，不调 VLM/不截图 ──
@@ -401,14 +466,18 @@ class FlowEngine:
                     self.ctx.incr_ocr_failures()
                     self.ctx.log(f"  ⚠ OCR 检测异常，转 VLM 兜底: {e}")
             if not found:
-                if step.get("target_prompt"):
-                    desc = self._render(step.get("target_prompt"))
+                if step.get("ocr_only"):
+                    # OCR-only：本地 OCR + 像素 diff（stop_on_stable），零 LLM
+                    self._log(f"  [{i}] OCR-only「{target}」: 未命中（不调 VLM）")
                 else:
-                    desc = f"当前截图中是否出现「{target}」文字？只回答 YES 或 NO。"
-                self.stats["vlm_calls"] += 1
-                resp = self.ctx.vision.query_text(shot, desc)
-                found = resp.is_affirmative
-                self._log(f"  [{i}] VLM「{target}」: {'FOUND' if found else '↓'}")
+                    if step.get("target_prompt"):
+                        desc = self._render(step.get("target_prompt"))
+                    else:
+                        desc = f"当前截图中是否出现「{target}」文字？只回答 YES 或 NO。"
+                    self.stats["vlm_calls"] += 1
+                    resp = self.ctx.vision.query_text(shot, desc)
+                    found = resp.is_affirmative
+                    self._log(f"  [{i}] VLM「{target}」: {'FOUND' if found else '↓'}")
 
             if found:
                 found_stem = f"{step_id}_found" + (f"_{suffix}" if suffix else "")

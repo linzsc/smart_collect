@@ -54,6 +54,26 @@ class _MockAdbFixed(MockAdbTools):
         return (1080, 2400)
 
 
+class _MockOcr:
+    """Mock OCR：固定返回详情页按钮 + 标签文本块（零 LLM 定位用）。"""
+
+    def __init__(self, blocks=None):
+        from collector.domain.vision.models import TextBlock
+
+        self._blocks = list(blocks) if blocks is not None else [
+            TextBlock(text="查看详细计价规则", bbox=[500, 1750, 610, 1830]),  # 中心 (555,1790)
+            TextBlock(text="工作日", bbox=[350, 130, 450, 170]),            # 中心 (400,150)
+            TextBlock(text="休息日", bbox=[350, 130, 450, 170]),            # 中心 (400,150)
+        ]
+        self.calls = 0
+
+    def extract(self, image_path):
+        from collector.domain.vision.models import TextExtractionResult
+
+        self.calls += 1
+        return TextExtractionResult(blocks=list(self._blocks), success=True)
+
+
 def _hit(x=100, y=200):
     return {"element": "x", "bbox": [x - 50, y - 50, x + 50, y + 50], "center": [x, y],
             "conf": 0.9, "found": True, "selected": None, "reason": None, "raw_response": ""}
@@ -419,6 +439,7 @@ def test_v2_flow_end_to_end():
         grounder = MagicMock()
         grounder.ground.side_effect = _ground_side_effect
         grounder.query_text.side_effect = _query_side_effect
+        ocr = _MockOcr()
 
         with patch("collector.platform.gaode.select_all.ensure_all_selected",
                    return_value=MagicMock()) as mock_ensure:
@@ -432,6 +453,7 @@ def test_v2_flow_end_to_end():
                 verbose=False, profile_cfg=profile_cfg,
                 platform_step_handlers=platform.step_handlers,
                 mode="debug",
+                text_extractor=ocr,
             )
             with patch("time.sleep"):   # 跳过真实等待，wait_seconds 仍累计
                 engine.run()
@@ -445,11 +467,15 @@ def test_v2_flow_end_to_end():
         descs = [c.args[1] for c in grounder.ground.call_args_list]
         assert any("曹操出行" in d for d in descs), "缺少供应商模板渲染"
         assert any("阳光出行" in d for d in descs), "缺少供应商模板渲染"
-        # 4. 标签坐标缓存（PERF-03）：首次 ground 后缓存，后续直接复用
+        # 4. 标签坐标缓存：OCR 首次命中后缓存，后续供应商直接复用（零 LLM）
         assert engine.state.get("tab_工作日") == [400, 150], engine.state
         assert engine.state.get("tab_休息日") == [400, 150], engine.state
-        tab_grounds = [d for d in descs if "标签页" in d]
-        assert len(tab_grounds) == 2, f"标签应仅首次 ground（2 次），实际 {len(tab_grounds)}"
+        # 5. 详情页入口 + 标签切换全部走 OCR，不再调 VLM ground
+        assert len([d for d in descs if "查看详细计价规则" in d]) == 0, "详情页入口应走 OCR"
+        assert len([d for d in descs if "标签页" in d]) == 0, "标签切换应走 OCR"
+        # 6. 滚动「预约用车」OCR-only，不调 VLM
+        assert len([c for c in grounder.query_text.call_args_list
+                    if "预约用车" in str(c.args[1])]) == 0, "滚动应 OCR-only（零 LLM）"
         # 5. 截图命名与 result 聚合兼容
         shots = sorted(p.name for p in (Path(tmp) / "out" / "screenshots").glob("*.jpg"))
         assert any("_工作日_scroll_0_曹操出行.jpg" in n for n in shots), shots
@@ -511,6 +537,7 @@ def test_v2_flow_light_mode():
         grounder = MagicMock()
         grounder.ground.side_effect = _ground_side_effect
         grounder.query_text.side_effect = _query_side_effect
+        ocr = _MockOcr()
 
         from collector.workflows.flow_engine import FlowEngine
         engine = None
@@ -524,6 +551,7 @@ def test_v2_flow_light_mode():
                 verbose=False, profile_cfg=profile_cfg,
                 platform_step_handlers=platform.step_handlers,
                 mode="debug",
+                text_extractor=ocr,
             )
             with patch("time.sleep"):
                 engine.run()
@@ -594,6 +622,7 @@ def test_v2_flow_scroll_boundary_first_screen_all_collected():
         grounder = MagicMock()
         grounder.ground.side_effect = _ground_side_effect
         grounder.query_text.side_effect = _query_side_effect
+        ocr = _MockOcr()
 
         with patch("collector.platform.gaode.select_all.ensure_all_selected",
                    return_value=MagicMock()):
@@ -606,6 +635,7 @@ def test_v2_flow_scroll_boundary_first_screen_all_collected():
                 verbose=False, profile_cfg=profile_cfg,
                 platform_step_handlers=platform.step_handlers,
                 mode="debug",
+                text_extractor=ocr,
             )
             # 边界预置：第一屏识别到的运力商全部视为已采集
             engine.state["_processed"] = set(FIRST_SCREEN)
